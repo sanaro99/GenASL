@@ -82,4 +82,4 @@ The pipeline produces a **render plan** JSON file describing how to overlay ASL 
 
 ## License
 
-This project is a student proof-of-concept for educational purposes.
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
