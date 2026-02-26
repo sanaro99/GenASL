@@ -1,0 +1,51 @@
+sentence_id,english_text,paraphrase_1,paraphrase_2,asset_id,duration_ms,qa_status
+S001,Do you have any gum?,Gum have you?,Do you have gum?,A001,2000,draft
+S002,What is the wi-fi password?,Wi-fi password what?,Can you tell me the wi-fi password?,A002,2200,draft
+S003,Can I borrow a pencil?,Pencil borrow please.,May I borrow a pencil?,A003,2000,draft
+S004,It looks like rain. Bring an umbrella.,Rain maybe umbrella bring.,Looks like rain you should bring an umbrella.,A004,2600,draft
+S005,What kind of coffee do you like?,Coffee prefer what kind you?,What type of coffee do you prefer?,A005,2400,draft
+S006,My phone is almost dead.,My phone almost dead.,My phone battery is almost dead.,A006,2200,draft
+S007,It is a beautiful day for a hike.,Beautiful hike go perfect.,Today is a perfect day for a hike.,A007,2400,draft
+S008,Let's go for a bike ride.,Bike ride go out.,Do you want to go for a bike ride?,A008,2200,draft
+S009,Do you like watching tennis?,Tennis watch you?,Do you enjoy watching tennis?,A009,2200,draft
+S010,Hey what's up?,Hey what is up?,What's going on?,A010,1800,draft
+S011,Hello my name is Sam.,Hello me name Sam.,Hi my name is Sam.,A011,2200,draft
+S012,Is this your friend?,Point your friend?,Is that person your friend?,A012,2000,draft
+S013,What are you doing?,You do what?,What are you up to?,A013,2000,draft
+S014,Nice to meet you.,Nice meet you.,It is great to meet you.,A014,1800,draft
+S015,Goodbye.,Goodbye see you.,See you later goodbye.,A015,1600,draft
+S016,Good night. See you tomorrow.,Good night see you tomorrow.,Have a good night I'll see you tomorrow.,A016,2400,draft
+S017,Do you want to meet at the restaurant tomorrow?,Tomorrow restaurant meet you?,Should we meet at the restaurant tomorrow?,A017,3000,draft
+S018,Where do you live?,You live where?,What area do you live in?,A018,2000,draft
+S019,Oh I see. I understand.,Oh I see understand.,I get it now.,A019,2000,draft
+S020,I don't understand. Please slow down.,Don't understand please slow.,I don't get it can you slow down?,A020,2600,draft
+S021,Could you please sign that again?,Sign again please.,Can you sign that one more time?,A021,2400,draft
+S022,Do you need help?,Help need you?,Can I help you with something?,A022,2000,draft
+S023,No it's not far.,No not far.,It is not far from here.,A023,2000,draft
+S024,Are you ready?,You ready?,Are you all set?,A024,1800,draft
+S025,Maybe. We'll see.,Maybe we will see.,Perhaps we'll find out.,A025,2000,draft
+S026,I'm a little nervous but excited.,Me nervous but excited.,I feel nervous but also excited.,A026,2400,draft
+S027,Now let's learn how to sign phrases.,Let's learn how to sign phrases.,Time to learn how to sign some phrases.,A027,2400,draft
+S028,Thank you for watching this video.,Thanks for watching this video.,Thank you for tuning in.,A028,2200,draft
+S029,Let me know in the comments.,Drop a comment in the comments.,Write your thoughts in the comments below.,A029,2200,draft
+S030,How are you doing today?,How is your day going?,How are things going for you?,A030,2200,draft
+S031,What is your name?,May I ask your name?,Could you tell me your name?,A031,2000,draft
+S032,I am sorry about that.,My apologies for that.,Sorry about what happened.,A032,2000,draft
+S033,Thank you very much.,Thanks a lot.,I really appreciate it thank you.,A033,1800,draft
+S034,You are welcome.,No problem at all.,Happy to help you are welcome.,A034,1600,draft
+S035,Please wait a moment.,Hold on just a second.,Give me one moment please.,A035,2000,draft
+S036,I will be right back.,Be back in a minute.,I am stepping out for a moment.,A036,2000,draft
+S037,How much does this cost?,What is the price of this?,How much do I need to pay?,A037,2200,draft
+S038,Excuse me where is the bathroom?,Can you point me to the restroom?,Where is the bathroom please?,A038,2400,draft
+S039,Can I ask you a question?,Do you mind if I ask something?,I have a question for you.,A039,2200,draft
+S040,I am a student.,I go to school.,I am currently studying.,A040,1800,draft
+S041,Good morning everyone.,Morning everyone.,Hello good morning to all of you.,A041,2000,draft
+S042,Have a good day.,Enjoy the rest of your day.,Hope you have a wonderful day.,A042,2000,draft
+S043,That is a great idea.,What a wonderful idea.,I think that idea is fantastic.,A043,2000,draft
+S044,I like this a lot.,This is really great.,I enjoy this very much.,A044,2000,draft
+S045,What time does the class start?,When does the class begin?,Could you tell me the start time?,A045,2400,draft
+S046,I need some help with this.,Could you help me with this?,I could use a hand with this.,A046,2200,draft
+S047,Please show me how to do this.,Can you demonstrate this for me?,Walk me through how to do this.,A047,2600,draft
+S048,I am learning something new.,I am picking up new skills.,This is new knowledge for me.,A048,2400,draft
+S049,Let's get started.,Let us begin.,Alright let's jump right in.,A049,1800,draft
+S050,I will see you in the next video.,Catch you in the next one.,See you next time.,A050,2200,draft
