@@ -1,0 +1,12 @@
+# GenASL Pipeline Configuration
+
+matcher:
+  model_name: "all-MiniLM-L6-v2"
+  confidence_threshold: 0.80
+  top_k: 1
+
+paths:
+  supported_set: "data/supported_set_v1.csv"
+  faiss_index: "data/faiss_index.bin"
+  index_metadata: "data/index_metadata.json"
+  logs: "logs/"
