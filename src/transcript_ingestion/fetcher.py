@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sys
 from typing import List, Dict
 
 from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -140,10 +143,12 @@ def fetch_transcript(video_id: str) -> List[Dict]:
         If no English transcript is available for the video.
     """
     _validate_video_id(video_id)
+    logger.info("Fetching transcript for video_id=%s", video_id)
 
     try:
         fetched = YouTubeTranscriptApi().fetch(video_id, languages=["en"])
     except NoTranscriptFound as exc:
+        logger.error("No English transcript found for video %s", video_id)
         raise NoTranscriptError(
             f"No English transcript found for video {video_id}"
         ) from exc
@@ -153,8 +158,18 @@ def fetch_transcript(video_id: str) -> List[Dict]:
         {"text": snippet.text, "start": snippet.start, "duration": snippet.duration}
         for snippet in fetched
     ]
+    logger.info("Received %d raw transcript chunks from YouTube API", len(raw_chunks))
+    for i, chunk in enumerate(raw_chunks[:5]):
+        logger.debug("  raw_chunk[%d]: start=%.2fs dur=%.2fs text=%r", i, chunk["start"], chunk["duration"], chunk["text"])
+    if len(raw_chunks) > 5:
+        logger.debug("  … (%d more raw chunks omitted)", len(raw_chunks) - 5)
 
-    return _merge_chunks(raw_chunks)
+    segments = _merge_chunks(raw_chunks)
+    logger.info("Merged %d raw chunks → %d sentence-level segments", len(raw_chunks), len(segments))
+    for seg in segments:
+        logger.debug("  %s [%d–%d ms]: %r", seg["segment_id"], seg["start_ms"], seg["end_ms"], seg["text"])
+
+    return segments
 
 
 # ---------------------------------------------------------------------------

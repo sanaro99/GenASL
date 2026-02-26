@@ -67,6 +67,15 @@ class Matcher:
 
         # Build the allowlist of valid sentence_ids from metadata values
         self._valid_ids: set[str] = set(self._metadata.values())
+        logger.info(
+            "Matcher initialised: model=%s  threshold=%.2f  top_k=%d  "
+            "index_size=%d  unique_sentence_ids=%d",
+            cfg["matcher"]["model_name"],
+            self._threshold,
+            self._top_k,
+            self._index.ntotal,
+            len(self._valid_ids),
+        )
 
     # -----------------------------------------------------------------
     # Public API
@@ -117,8 +126,25 @@ class Matcher:
         result["action"] = action
         result["sentence_id"] = sentence_id
         result["score"] = round(best_score, 4)
+
+        logger.info(
+            "  %s  action=%-8s  score=%.4f  sentence_id=%-6s  text=%r",
+            segment.get("segment_id", "?"),
+            action,
+            best_score,
+            sentence_id or "—",
+            text[:80],
+        )
         return result
 
     def match_all(self, segments: List[dict]) -> List[dict]:
         """Run :meth:`match` on every segment and return the full list."""
-        return [self.match(seg) for seg in segments]
+        logger.info("Matching %d segments against FAISS index …", len(segments))
+        results = [self.match(seg) for seg in segments]
+        asl_count = sum(1 for r in results if r["action"] == "ASL")
+        cap_count = len(results) - asl_count
+        logger.info(
+            "Matching complete: %d ASL, %d CAPTIONS out of %d total",
+            asl_count, cap_count, len(results),
+        )
+        return results

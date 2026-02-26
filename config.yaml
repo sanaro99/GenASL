@@ -2,7 +2,7 @@
 
 matcher:
   model_name: "all-MiniLM-L6-v2"
-  confidence_threshold: 0.80
+  confidence_threshold: 0.70
   top_k: 1
 
 paths:
