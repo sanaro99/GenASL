@@ -53,24 +53,24 @@ def test_full_pipeline_integration(mock_api_cls, tmp_path, monkeypatch):
     plan = run(_VIDEO_ID)
 
     # ── 1. Exactly 8 segments ──────────────────────────────────────────
-    assert plan["total_segments"] == 8, (
-        f"Expected 8 segments, got {plan['total_segments']}"
+    assert plan["summary"]["total_segments"] == 8, (
+        f"Expected 8 segments, got {plan['summary']['total_segments']}"
     )
     assert len(plan["segments"]) == 8
 
     # ── 2. The 5 matched segments have action="ASL" ────────────────────
-    asl_segs = [s for s in plan["segments"] if s["action"] == "ASL"]
-    assert plan["asl_segments"] >= 5, (
-        f"Expected at least 5 ASL segments, got {plan['asl_segments']}"
+    asl_segs = [s for s in plan["segments"] if s["match"]["action"] == "ASL"]
+    assert plan["summary"]["asl_segments"] >= 5, (
+        f"Expected at least 5 ASL segments, got {plan['summary']['asl_segments']}"
     )
 
     # ── 3. The 3 off-list segments have action="CAPTIONS" (RAI gate) ───
-    captions_segs = [s for s in plan["segments"] if s["action"] == "CAPTIONS"]
-    assert plan["captions_segments"] >= 3, (
-        f"Expected at least 3 CAPTIONS segments, got {plan['captions_segments']}"
+    captions_segs = [s for s in plan["segments"] if s["match"]["action"] == "CAPTIONS"]
+    assert plan["summary"]["captions_segments"] >= 3, (
+        f"Expected at least 3 CAPTIONS segments, got {plan['summary']['captions_segments']}"
     )
     # Verify at least the most obviously off-list text fell back
-    captions_texts = [s["text"] for s in captions_segs]
+    captions_texts = [s["source_text"] for s in captions_segs]
     assert any("mitochondria" in t for t in captions_texts), (
         "Off-list sentence about mitochondria should be CAPTIONS"
     )
@@ -85,6 +85,7 @@ def test_full_pipeline_integration(mock_api_cls, tmp_path, monkeypatch):
     with open(render_files[0], "r") as fh:
         saved = json.load(fh)
     assert saved["run_id"] == plan["run_id"]
+    assert saved["schema_version"] == "2.0"
 
     # ── 6. run_log.jsonl has a new entry ───────────────────────────────
     log_file = tmp_path / "run_log.jsonl"
@@ -94,3 +95,17 @@ def test_full_pipeline_integration(mock_api_cls, tmp_path, monkeypatch):
     entry = json.loads(lines[-1])
     assert entry["run_id"] == plan["run_id"]
     assert entry["video_id"] == _VIDEO_ID
+
+    # ── 7. ASL overlay track for 3D mapping ingestion ─────────────────
+    track = plan["asl_overlay_track"]
+    assert len(track) >= 5, f"Expected ≥5 ASL overlay entries, got {len(track)}"
+    for t in track:
+        assert "asset_id" in t and t["asset_id"] is not None
+        assert "start_ms" in t and "end_ms" in t
+        assert "start_tc" in t  # timecode string
+
+    # ── 8. Structured segment sub-objects present ─────────────────────
+    first = plan["segments"][0]
+    assert "timing" in first and "match" in first and "source_text" in first
+    assert "duration_ms" in first["timing"]
+    assert "confidence" in first["match"]

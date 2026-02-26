@@ -103,9 +103,12 @@ def test_high_asl_ratio_triggers_warning(caplog):
 
     plan = {
         "video_id": "test12345ab",
-        "total_segments": 10,
-        "asl_segments": 10,
-        "captions_segments": 0,
+        "summary": {
+            "total_segments": 10,
+            "asl_segments": 10,
+            "captions_segments": 0,
+            "asl_ratio": 1.0,
+        },
         "segments": [],
     }
 
@@ -126,9 +129,12 @@ def test_zero_segments_triggers_warning(caplog):
 
     plan = {
         "video_id": "test12345ab",
-        "total_segments": 0,
-        "asl_segments": 0,
-        "captions_segments": 0,
+        "summary": {
+            "total_segments": 0,
+            "asl_segments": 0,
+            "captions_segments": 0,
+            "asl_ratio": 0.0,
+        },
         "segments": [],
     }
 
