@@ -1,0 +1,51 @@
+sentence_id,english_text,asl_keyword,notes
+S001,Do you have any gum?,GUM,
+S002,What is the wi-fi password?,PASSWORD,Wi-fi not in WLASL; PASSWORD is the core sign
+S003,Can I borrow a pencil?,PENCIL,
+S004,It looks like rain. Bring an umbrella.,RAIN,UMBRELLA also viable but RAIN is the main topic
+S005,What kind of coffee do you like?,COFFEE,
+S006,My phone is almost dead.,PHONE,
+S007,It is a beautiful day for a hike.,BEAUTIFUL,HIKE not in WLASL; BEAUTIFUL is the key descriptor
+S008,Let's go for a bike ride.,BICYCLE,WLASL uses BICYCLE not BIKE
+S009,Do you like watching tennis?,TENNIS,
+S010,Hey what's up?,HELLO,No single sign for "what's up"; HELLO is closest
+S011,Hello my name is Sam.,NAME,
+S012,Is this your friend?,FRIEND,
+S013,What are you doing?,DO,ASL uses DO/WHAT in this context
+S014,Nice to meet you.,MEET,
+S015,Goodbye.,GOODBYE,
+S016,Good night. See you tomorrow.,NIGHT,TOMORROW also viable
+S017,Do you want to meet at the restaurant tomorrow?,RESTAURANT,
+S018,Where do you live?,LIVE,As in reside
+S019,Oh I see. I understand.,UNDERSTAND,
+S020,I don't understand. Please slow down.,SLOW,UNDERSTAND also viable but SLOW is the request
+S021,Could you please sign that again?,AGAIN,
+S022,Do you need help?,HELP,
+S023,No it's not far.,FAR,
+S024,Are you ready?,READY,
+S025,Maybe. We'll see.,MAYBE,
+S026,I'm a little nervous but excited.,NERVOUS,EXCITED also viable
+S027,Now let's learn how to sign phrases.,LEARN,
+S028,Thank you for watching this video.,THANK-YOU,Compound sign in ASL
+S029,Let me know in the comments.,KNOW,COMMENT not in WLASL
+S030,How are you doing today?,HOW,
+S031,What is your name?,NAME,Same keyword as S011; different sentence context
+S032,I am sorry about that.,SORRY,
+S033,Thank you very much.,THANK-YOU,Same keyword as S028
+S034,You are welcome.,WELCOME,
+S035,Please wait a moment.,WAIT,
+S036,I will be right back.,BACK,As in return
+S037,How much does this cost?,COST,
+S038,Excuse me where is the bathroom?,BATHROOM,
+S039,Can I ask you a question?,QUESTION,
+S040,I am a student.,STUDENT,
+S041,Good morning everyone.,MORNING,
+S042,Have a good day.,DAY,GOOD also viable
+S043,That is a great idea.,IDEA,
+S044,I like this a lot.,LIKE,
+S045,What time does the class start?,CLASS,TIME also viable but CLASS is more specific
+S046,I need some help with this.,HELP,Same keyword as S022
+S047,Please show me how to do this.,SHOW,
+S048,I am learning something new.,LEARN,Same keyword as S027
+S049,Let's get started.,START,
+S050,I will see you in the next video.,SEE,
