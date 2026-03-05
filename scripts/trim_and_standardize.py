@@ -11,9 +11,23 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def _yt_dlp_bin() -> str:
+    """Return the path to the yt-dlp executable.
+
+    Looks in the same directory as the running Python interpreter first
+    (handles virtualenvs on Windows where Scripts/ may not be on PATH).
+    """
+    scripts_dir = Path(sys.executable).parent
+    candidate = scripts_dir / ("yt-dlp.exe" if os.name == "nt" else "yt-dlp")
+    if candidate.is_file():
+        return str(candidate)
+    return "yt-dlp"  # fall back to PATH lookup
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +51,7 @@ def download_clip(youtube_id: str, output_path: str) -> bool:
     """
     url = f"https://www.youtube.com/watch?v={youtube_id}"
     cmd = [
-        "yt-dlp",
+        _yt_dlp_bin(),
         "--no-playlist",
         "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "--merge-output-format", "mp4",
@@ -62,6 +76,62 @@ def download_clip(youtube_id: str, output_path: str) -> bool:
         return False
     except subprocess.TimeoutExpired:
         logger.error("Download timed out for %s", youtube_id)
+        return False
+
+
+def download_url(url: str, output_path: str) -> bool:
+    """Download a video directly from a URL (non-YouTube sources).
+
+    Uses yt-dlp which supports many sites, or falls back to requests for
+    direct .mp4 links.
+
+    Parameters
+    ----------
+    url : str
+        Direct video URL (aslbricks, aslsignbank, etc.).
+    output_path : str
+        Destination file path.
+
+    Returns
+    -------
+    bool
+        True if the download succeeded.
+    """
+    # Try yt-dlp first (handles many sites)
+    cmd = [
+        _yt_dlp_bin(),
+        "--no-playlist",
+        "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "--merge-output-format", "mp4",
+        "--output", output_path,
+        "--no-overwrites",
+        "--socket-timeout", "30",
+        "--retries", "3",
+        url,
+    ]
+    logger.info("Downloading (direct) %s → %s", url, output_path)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode == 0:
+            logger.info("Download complete: %s", output_path)
+            return True
+        logger.warning("yt-dlp failed for direct URL, trying requests: %s", result.stderr[:300])
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        logger.warning("yt-dlp issue for direct URL: %s", exc)
+
+    # Fallback: plain HTTP download for direct .mp4 links
+    try:
+        import requests
+        resp = requests.get(url, timeout=60, stream=True)
+        resp.raise_for_status()
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        with open(output_path, "wb") as fh:
+            for chunk in resp.iter_content(chunk_size=8192):
+                fh.write(chunk)
+        logger.info("Download (requests) complete: %s", output_path)
+        return True
+    except Exception as exc:
+        logger.error("Direct download failed for %s: %s", url, exc)
         return False
 
 

@@ -44,6 +44,13 @@ logs/
 # Data binaries
 data/*.bin
 
+# Asset video files (large — download via build_assets.py)
+assets/raw/
+assets/trimmed/
+assets/final/*.mp4
+!assets/final/.gitkeep
+!assets/placeholders/
+
 # Jupyter
 .ipynb_checkpoints/
 

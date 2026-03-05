@@ -23,8 +23,11 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
+import re
+
 from scripts.trim_and_standardize import (
     download_clip,
+    download_url,
     trim_clip,
     standardize_clip,
     run_qa_check,
@@ -86,18 +89,40 @@ def _load_wlasl_index() -> dict[str, list]:
     return index
 
 
+def _extract_youtube_id(url: str) -> str | None:
+    """Extract YouTube video ID from a URL, or return None."""
+    m = re.search(r'(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]{11})', url or '')
+    return m.group(1) if m else None
+
+
 def _pick_best_instance(instances: list[dict]) -> dict | None:
-    """Pick the best WLASL instance (prefer split=train, shortest clip)."""
+    """Pick the best WLASL instance.
+
+    Priority:
+    1. Prefer instances with valid timestamps (frame_end > frame_start > 0)
+    2. Prefer split=train
+    3. Prefer shorter clips (fewer frames)
+    """
     if not instances:
         return None
-    # Prefer train split, then shortest clip
     scored = []
     for inst in instances:
+        url = inst.get("url", "")
+        if not url:
+            continue
+        frame_start = inst.get("frame_start", 0) or 0
+        frame_end = inst.get("frame_end", -1)
+        # frame_end == -1 means "whole clip" — still valid
+        has_good_timestamps = (frame_end > frame_start) if frame_end != -1 else True
         split_priority = 0 if inst.get("split") == "train" else 1
-        bbox = inst.get("frame_end", 0) - inst.get("frame_start", 0)
-        scored.append((split_priority, bbox, inst))
-    scored.sort(key=lambda x: (x[0], x[1]))
-    return scored[0][2]
+        # For sorting: prefer short clips; whole-clip entries get a large number
+        span = (frame_end - frame_start) if (frame_end > 0 and frame_end > frame_start) else 9999
+        ts_priority = 0 if has_good_timestamps else 1
+        scored.append((ts_priority, split_priority, span, inst))
+    if not scored:
+        return None
+    scored.sort(key=lambda x: (x[0], x[1], x[2]))
+    return scored[0][3]
 
 
 # ---------------------------------------------------------------------------
@@ -161,48 +186,61 @@ def build_all() -> None:
         if instances:
             inst = _pick_best_instance(instances)
             if inst:
-                yt_id = inst.get("video_id", "")
-                # WLASL timestamps are in frames; some entries use seconds
-                # The dataset uses frame_start/frame_end at ~25fps
+                url = inst.get("url", "")
+                yt_id = _extract_youtube_id(url)
+                wlasl_vid_id = inst.get("video_id", "")
                 fps_src = inst.get("fps", 25) or 25
                 frame_start = inst.get("frame_start", 0) or 0
-                frame_end = inst.get("frame_end", 0) or 0
-                start_sec = frame_start / fps_src
-                end_sec = frame_end / fps_src
+                frame_end = inst.get("frame_end", -1)
+                whole_clip = (frame_end == -1)
 
-                if yt_id and end_sec > start_sec:
-                    raw_path = str(RAW_DIR / f"{yt_id}.mp4")
-                    trimmed_path = str(TRIMMED_DIR / f"{aid}_trimmed.mp4")
-
-                    # Step A: Download (skip if already cached)
-                    if os.path.isfile(raw_path):
-                        logger.info("Raw clip cached: %s", raw_path)
-                        dl_ok = True
-                    else:
-                        dl_ok = download_clip(yt_id, raw_path)
-
-                    # Step B: Trim
-                    trim_ok = False
-                    if dl_ok:
-                        trim_ok = trim_clip(raw_path, trimmed_path, start_sec, end_sec)
-
-                    # Step C: Standardize
-                    std_ok = False
-                    if trim_ok:
-                        std_ok = standardize_clip(trimmed_path, final_path)
-
-                    if std_ok:
-                        asset_entry["source"] = "wlasl"
-                        asset_entry["wlasl_video_id"] = yt_id
-                        stats["wlasl"] += 1
-                        logger.info("✓ %s from WLASL (video=%s)", aid, yt_id)
-                    else:
-                        # Fall back to placeholder
-                        logger.warning("Pipeline failed for %s — using placeholder", aid)
-                        shutil.copy2(str(PLACEHOLDER_PATH), final_path)
-                        stats["placeholder"] += 1
+                if whole_clip:
+                    start_sec = 0.0
+                    end_sec = 0.0  # will skip trim step
                 else:
-                    logger.warning("Bad WLASL entry for %s (no video_id or bad timestamps)", keyword)
+                    start_sec = frame_start / fps_src
+                    end_sec = frame_end / fps_src
+
+                # Use a cache key based on wlasl instance video_id
+                cache_key = wlasl_vid_id or (yt_id or aid)
+                raw_path = str(RAW_DIR / f"{cache_key}.mp4")
+                trimmed_path = str(TRIMMED_DIR / f"{aid}_trimmed.mp4")
+
+                # Step A: Download (skip if already cached)
+                dl_ok = False
+                if os.path.isfile(raw_path):
+                    logger.info("Raw clip cached: %s", raw_path)
+                    dl_ok = True
+                elif yt_id:
+                    dl_ok = download_clip(yt_id, raw_path)
+                elif url:
+                    dl_ok = download_url(url, raw_path)
+                else:
+                    logger.warning("No URL for %s instance", keyword)
+
+                # Step B: Trim (skip if whole_clip — go straight to standardize)
+                if dl_ok and not whole_clip and end_sec > start_sec:
+                    trim_ok = trim_clip(raw_path, trimmed_path, start_sec, end_sec)
+                elif dl_ok:
+                    # Whole clip or no timestamps: skip trim, standardize from raw
+                    trimmed_path = raw_path
+                    trim_ok = True
+                else:
+                    trim_ok = False
+
+                # Step C: Standardize
+                std_ok = False
+                if trim_ok:
+                    std_ok = standardize_clip(trimmed_path, final_path)
+
+                if std_ok:
+                    asset_entry["source"] = "wlasl"
+                    asset_entry["wlasl_video_id"] = yt_id or wlasl_vid_id
+                    stats["wlasl"] += 1
+                    logger.info("✓ %s from WLASL (url=%s)", aid, url[:60])
+                else:
+                    # Fall back to placeholder
+                    logger.warning("Pipeline failed for %s — using placeholder", aid)
                     shutil.copy2(str(PLACEHOLDER_PATH), final_path)
                     stats["placeholder"] += 1
             else:
