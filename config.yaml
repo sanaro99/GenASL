@@ -9,4 +9,5 @@ paths:
   supported_set: "data/supported_set_v1.csv"
   faiss_index: "data/faiss_index.bin"
   index_metadata: "data/index_metadata.json"
+  asset_manifest: "assets/asset_manifest_v1.json"
   logs: "logs/"

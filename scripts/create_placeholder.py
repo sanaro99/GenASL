@@ -3,6 +3,7 @@
 Creates:
   assets/placeholders/placeholder.mp4        — generic "ASL signing in progress"
   assets/placeholders/generic_placeholder.mp4 — same as above (alias)
+  assets/placeholders/placeholder_<KEYWORD>.mp4 — one per missing keyword
 
 Usage::
 
@@ -12,6 +13,7 @@ Usage::
 from __future__ import annotations
 
 import csv
+import json
 import os
 import shutil
 import subprocess
@@ -20,6 +22,7 @@ from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PLACEHOLDERS_DIR = _PROJECT_ROOT / "assets" / "placeholders"
+MANIFEST_PATH = _PROJECT_ROOT / "assets" / "asset_manifest_v1.json"
 
 
 def _check_ffmpeg() -> bool:
@@ -125,7 +128,45 @@ def main() -> None:
     shutil.copy2(generic_path, default_path)
     print(f"  ✓ {default_path} (copy of generic)")
 
+    # 3. Per-keyword placeholders for missing keywords
+    _create_keyword_placeholders()
+
     print("\nPlaceholder clips created successfully.")
+
+
+def _create_keyword_placeholders() -> None:
+    """Create labeled placeholders for each keyword that fell back to placeholder."""
+    if not MANIFEST_PATH.is_file():
+        print("\n  ℹ Manifest not found — skipping per-keyword placeholders.")
+        print("    Run build_assets.py first, then re-run this script.")
+        return
+
+    with open(MANIFEST_PATH, "r", encoding="utf-8") as fh:
+        manifest = json.load(fh)
+
+    # Collect unique keywords that used placeholder source
+    placeholder_keywords: set[str] = set()
+    for asset in manifest.get("assets", []):
+        if asset.get("source") == "placeholder":
+            kw = asset.get("asl_keyword", "").strip()
+            if kw:
+                placeholder_keywords.add(kw)
+
+    if not placeholder_keywords:
+        print("\n  ℹ No placeholder keywords found — all assets sourced from WLASL.")
+        return
+
+    print(f"\nCreating {len(placeholder_keywords)} per-keyword placeholders …")
+    for kw in sorted(placeholder_keywords):
+        out_path = str(PLACEHOLDERS_DIR / f"placeholder_{kw}.mp4")
+        if os.path.isfile(out_path):
+            print(f"  ⊘ {kw:15s} — already exists")
+            continue
+        ok = create_placeholder(out_path, text=kw)
+        if ok:
+            print(f"  ✓ {kw:15s} → placeholder_{kw}.mp4")
+        else:
+            print(f"  ✗ {kw:15s} — failed")
 
 
 if __name__ == "__main__":

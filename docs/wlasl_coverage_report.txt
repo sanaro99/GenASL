@@ -1,0 +1,46 @@
+WLASL Keyword Coverage Report
+==============================
+Generated: 2026-03-04
+Dataset: WLASL v0.3 (2000 glosses)
+Source: https://raw.githubusercontent.com/dxli94/WLASL/master/start_kit/WLASL_v0.3.json
+
+Supported Set: 50 sentences (data/supported_set_v1.csv)
+Unique ASL keywords: 46 (from scripts/keyword_map.csv)
+
+Coverage: 44 / 46 keywords found in WLASL (95.7%)
+
+Missing keywords (2):
+  - DO        (S013: "How are you doing today?")
+  - PASSWORD  (S002: "What is the wi-fi password?")
+
+Build results (from scripts/build_assets.py):
+  - 29 / 50 clips sourced from WLASL YouTube videos
+  - 21 / 50 clips using placeholder (video unavailable or keyword missing)
+
+Placeholder fallback reasons:
+  - 2 keywords not found in WLASL dataset (DO, PASSWORD)
+  - 19 keywords found in WLASL but source YouTube videos were unavailable
+    (deleted, private, or geo-restricted since dataset publication in 2020)
+
+Assets using placeholder:
+  A002  PASSWORD   (S002)  - keyword not in WLASL
+  A005  COFFEE     (S005)  - video unavailable
+  A006  PHONE      (S006)  - video unavailable
+  A010  HELLO      (S010)  - video unavailable
+  A011  NAME       (S011)  - video unavailable
+  A013  DO         (S013)  - keyword not in WLASL
+  A014  MEET       (S014)  - video unavailable
+  A016  NIGHT      (S016)  - video unavailable
+  A017  RESTAURANT (S017)  - video unavailable
+  A022  HELP       (S022)  - video unavailable
+  A024  READY      (S024)  - video unavailable
+  A025  MAYBE      (S025)  - video unavailable
+  A026  NERVOUS    (S026)  - video unavailable
+  A028  THANK-YOU  (S028)  - video unavailable
+  A031  NAME       (S031)  - video unavailable
+  A033  THANK-YOU  (S033)  - video unavailable
+  A041  MORNING    (S041)  - video unavailable
+  A043  IDEA       (S043)  - video unavailable
+  A045  CLASS      (S045)  - video unavailable
+  A046  HELP       (S046)  - video unavailable
+  A050  SEE        (S050)  - video unavailable
