@@ -169,5 +169,41 @@ def _create_keyword_placeholders() -> None:
             print(f"  ✗ {kw:15s} — failed")
 
 
+def create_descriptive_placeholders() -> None:
+    """Create placeholders with descriptive filenames matching the new convention.
+
+    Reads the manifest and for every placeholder-sourced asset, creates
+    ``assets/final/{asset_id}_{sentence_id}_{KEYWORD}.mp4``  with the
+    keyword overlaid on a blue background.
+    """
+    if not MANIFEST_PATH.is_file():
+        print("Manifest not found — run build_assets.py first.")
+        return
+
+    with open(MANIFEST_PATH, "r", encoding="utf-8") as fh:
+        manifest = json.load(fh)
+
+    final_dir = _PROJECT_ROOT / "assets" / "final"
+    os.makedirs(final_dir, exist_ok=True)
+
+    count = 0
+    for asset in manifest.get("assets", []):
+        if asset.get("source") != "placeholder":
+            continue
+        fp = asset.get("file_path", "")
+        dest = str(_PROJECT_ROOT / fp) if fp else None
+        if not dest:
+            continue
+        kw = asset.get("asl_keyword", "PLACEHOLDER")
+        ok = create_placeholder(dest, text=kw)
+        if ok:
+            count += 1
+            print(f"  ✓ {os.path.basename(dest)}")
+        else:
+            print(f"  ✗ {os.path.basename(dest)} — failed")
+
+    print(f"\nCreated {count} descriptive placeholder clips.")
+
+
 if __name__ == "__main__":
     main()

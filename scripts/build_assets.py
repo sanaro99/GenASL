@@ -1,8 +1,17 @@
 """Master orchestration script — build all 50 ASL asset clips.
 
 Reads keyword_map.csv, looks up each keyword in the WLASL index,
-downloads / trims / standardizes clips, and falls back to placeholder
-when a keyword is not found in WLASL.
+downloads / trims / standardises clips from a preferred signer, and
+falls back to placeholder only when **all** instances are exhausted.
+
+Changes vs v1
+--------------
+* Signer preference chain (default: 9 → 109 → 12 → any) for visual
+  consistency across clips.
+* Multi-instance retry — every viable instance is attempted before
+  falling back to placeholder.
+* Descriptive filenames: ``A001_S001_GUM.mp4`` instead of ``A001.mp4``.
+* ``signer_id`` recorded in manifest.
 
 Usage::
 
@@ -12,18 +21,20 @@ Usage::
 from __future__ import annotations
 
 import csv
+import glob
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import yaml
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
-
-import re
 
 from scripts.trim_and_standardize import (
     download_clip,
@@ -48,11 +59,18 @@ RAW_DIR = _PROJECT_ROOT / "assets" / "raw"
 TRIMMED_DIR = _PROJECT_ROOT / "assets" / "trimmed"
 FINAL_DIR = _PROJECT_ROOT / "assets" / "final"
 PLACEHOLDER_PATH = _PROJECT_ROOT / "assets" / "placeholders" / "placeholder.mp4"
+CONFIG_PATH = _PROJECT_ROOT / "config.yaml"
 
 
 # ---------------------------------------------------------------------------
 # Loaders
 # ---------------------------------------------------------------------------
+
+def _load_config() -> dict:
+    """Load config.yaml and return parsed dict."""
+    with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh)
+
 
 def _load_supported_set() -> list[dict]:
     with open(SUPPORTED_SET_PATH, "r", encoding="utf-8") as fh:
@@ -89,40 +107,111 @@ def _load_wlasl_index() -> dict[str, list]:
     return index
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 def _extract_youtube_id(url: str) -> str | None:
     """Extract YouTube video ID from a URL, or return None."""
     m = re.search(r'(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]{11})', url or '')
     return m.group(1) if m else None
 
 
-def _pick_best_instance(instances: list[dict]) -> dict | None:
-    """Pick the best WLASL instance.
+def _safe_filename_keyword(keyword: str) -> str:
+    """Sanitise a keyword for use in a filename (spaces/hyphens → underscores)."""
+    return re.sub(r'[^A-Za-z0-9_]', '_', keyword.replace("-", "_").replace(" ", "_")).upper()
 
-    Priority:
-    1. Prefer instances with valid timestamps (frame_end > frame_start > 0)
-    2. Prefer split=train
-    3. Prefer shorter clips (fewer frames)
+
+def _rank_instances(
+    instances: list[dict],
+    preferred_signers: list[int],
+) -> list[dict]:
+    """Return **all** viable instances ranked by signer preference then quality.
+
+    Scoring (ascending = better):
+        0. signer_rank  — index in ``preferred_signers`` list; len+1 for unknown
+        1. ts_priority  — 0 if valid timestamps, 1 otherwise
+        2. split_rank   — 0 for train, 1 for other
+        3. span         — frame count (shorter better); 9999 for whole-clip
     """
     if not instances:
-        return None
-    scored = []
+        return []
+
+    signer_lookup = {sid: idx for idx, sid in enumerate(preferred_signers)}
+    fallback_rank = len(preferred_signers) + 1
+
+    scored: list[tuple] = []
     for inst in instances:
         url = inst.get("url", "")
         if not url:
             continue
+        signer_id = inst.get("signer_id")
+        signer_rank = signer_lookup.get(signer_id, fallback_rank)
+
         frame_start = inst.get("frame_start", 0) or 0
         frame_end = inst.get("frame_end", -1)
-        # frame_end == -1 means "whole clip" — still valid
-        has_good_timestamps = (frame_end > frame_start) if frame_end != -1 else True
-        split_priority = 0 if inst.get("split") == "train" else 1
-        # For sorting: prefer short clips; whole-clip entries get a large number
+        has_good_ts = (frame_end > frame_start) if frame_end != -1 else True
+        ts_priority = 0 if has_good_ts else 1
+        split_rank = 0 if inst.get("split") == "train" else 1
         span = (frame_end - frame_start) if (frame_end > 0 and frame_end > frame_start) else 9999
-        ts_priority = 0 if has_good_timestamps else 1
-        scored.append((ts_priority, split_priority, span, inst))
-    if not scored:
-        return None
-    scored.sort(key=lambda x: (x[0], x[1], x[2]))
-    return scored[0][3]
+
+        scored.append((signer_rank, ts_priority, split_rank, span, inst))
+
+    scored.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
+    return [s[4] for s in scored]
+
+
+def _try_download_trim_standardise(inst: dict, aid: str, final_path: str) -> bool:
+    """Attempt full pipeline (download → trim → standardise) for one instance.
+
+    Returns True on success, False on any failure.
+    """
+    url = inst.get("url", "")
+    yt_id = _extract_youtube_id(url)
+    wlasl_vid_id = inst.get("video_id", "")
+    fps_src = inst.get("fps", 25) or 25
+    frame_start = inst.get("frame_start", 0) or 0
+    frame_end = inst.get("frame_end", -1)
+    whole_clip = (frame_end == -1)
+
+    if whole_clip:
+        start_sec = 0.0
+        end_sec = 0.0
+    else:
+        start_sec = frame_start / fps_src
+        end_sec = frame_end / fps_src
+
+    cache_key = wlasl_vid_id or (yt_id or aid)
+    raw_path = str(RAW_DIR / f"{cache_key}.mp4")
+    trimmed_path = str(TRIMMED_DIR / f"{aid}_trimmed.mp4")
+
+    # Step A: Download (skip if cached)
+    dl_ok = False
+    if os.path.isfile(raw_path):
+        logger.info("  Raw clip cached: %s", raw_path)
+        dl_ok = True
+    elif yt_id:
+        dl_ok = download_clip(yt_id, raw_path)
+    elif url:
+        dl_ok = download_url(url, raw_path)
+    else:
+        logger.warning("  No URL for instance video_id=%s", wlasl_vid_id)
+
+    if not dl_ok:
+        return False
+
+    # Step B: Trim (skip for whole-clip entries)
+    if not whole_clip and end_sec > start_sec:
+        trim_ok = trim_clip(raw_path, trimmed_path, start_sec, end_sec)
+    else:
+        trimmed_path = raw_path
+        trim_ok = True
+
+    if not trim_ok:
+        return False
+
+    # Step C: Standardise
+    return standardize_clip(trimmed_path, final_path)
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +219,11 @@ def _pick_best_instance(instances: list[dict]) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def build_all() -> None:
-    """Download, trim, standardize all 50 asset clips."""
+    """Download, trim, standardise all 50 asset clips."""
+    cfg = _load_config()
+    preferred_signers: list[int] = cfg.get("build", {}).get("preferred_signer_ids", [9, 109, 12])
+    logger.info("Preferred signer chain: %s", preferred_signers)
+
     supported = _load_supported_set()
     kw_map = _load_keyword_map()
     wlasl = _load_wlasl_index()
@@ -138,6 +231,13 @@ def build_all() -> None:
     # Ensure dirs exist
     for d in [RAW_DIR, TRIMMED_DIR, FINAL_DIR]:
         os.makedirs(d, exist_ok=True)
+
+    # Clean old final clips (filenames are changing)
+    old_clips = glob.glob(str(FINAL_DIR / "*.mp4"))
+    if old_clips:
+        logger.info("Cleaning %d old final clips …", len(old_clips))
+        for f in old_clips:
+            os.remove(f)
 
     if not PLACEHOLDER_PATH.is_file():
         logger.error(
@@ -147,24 +247,28 @@ def build_all() -> None:
         sys.exit(1)
 
     manifest_assets: list[dict] = []
-    stats = {"wlasl": 0, "placeholder": 0, "failed": 0}
+    stats = {"wlasl": 0, "placeholder": 0}
 
     for row in supported:
         sid = row["sentence_id"]
         aid = row["asset_id"]
         kw_info = kw_map.get(sid, {})
         keyword = kw_info.get("asl_keyword", "")
-        english = kw_info.get("english_text", row["english_text"])
+        safe_kw = _safe_filename_keyword(keyword)
 
         logger.info("─" * 50)
         logger.info("Processing %s / %s  keyword=%s", sid, aid, keyword)
+
+        # New filename convention: A001_S001_GUM.mp4
+        final_name = f"{aid}_{sid}_{safe_kw}.mp4"
+        final_path = str(FINAL_DIR / final_name)
 
         asset_entry = {
             "asset_id": aid,
             "sentence_id": sid,
             "asl_keyword": keyword,
             "source": "placeholder",
-            "file_path": f"assets/final/{aid}.mp4",
+            "file_path": f"assets/final/{final_name}",
             "fps": 25,
             "duration_ms": 0,
             "width": 320,
@@ -172,83 +276,49 @@ def build_all() -> None:
             "qa_status": "pending",
             "qa_issues": [],
             "wlasl_video_id": "",
+            "signer_id": None,
             "notes": kw_info.get("notes", ""),
         }
-
-        final_path = str(FINAL_DIR / f"{aid}.mp4")
 
         # Try to find keyword in WLASL
         instances = wlasl.get(keyword, [])
         if not instances:
-            # Try without hyphen
             instances = wlasl.get(keyword.replace("-", " "), [])
 
+        success = False
         if instances:
-            inst = _pick_best_instance(instances)
-            if inst:
-                url = inst.get("url", "")
-                yt_id = _extract_youtube_id(url)
-                wlasl_vid_id = inst.get("video_id", "")
-                fps_src = inst.get("fps", 25) or 25
-                frame_start = inst.get("frame_start", 0) or 0
-                frame_end = inst.get("frame_end", -1)
-                whole_clip = (frame_end == -1)
-
-                if whole_clip:
-                    start_sec = 0.0
-                    end_sec = 0.0  # will skip trim step
-                else:
-                    start_sec = frame_start / fps_src
-                    end_sec = frame_end / fps_src
-
-                # Use a cache key based on wlasl instance video_id
-                cache_key = wlasl_vid_id or (yt_id or aid)
-                raw_path = str(RAW_DIR / f"{cache_key}.mp4")
-                trimmed_path = str(TRIMMED_DIR / f"{aid}_trimmed.mp4")
-
-                # Step A: Download (skip if already cached)
-                dl_ok = False
-                if os.path.isfile(raw_path):
-                    logger.info("Raw clip cached: %s", raw_path)
-                    dl_ok = True
-                elif yt_id:
-                    dl_ok = download_clip(yt_id, raw_path)
-                elif url:
-                    dl_ok = download_url(url, raw_path)
-                else:
-                    logger.warning("No URL for %s instance", keyword)
-
-                # Step B: Trim (skip if whole_clip — go straight to standardize)
-                if dl_ok and not whole_clip and end_sec > start_sec:
-                    trim_ok = trim_clip(raw_path, trimmed_path, start_sec, end_sec)
-                elif dl_ok:
-                    # Whole clip or no timestamps: skip trim, standardize from raw
-                    trimmed_path = raw_path
-                    trim_ok = True
-                else:
-                    trim_ok = False
-
-                # Step C: Standardize
-                std_ok = False
-                if trim_ok:
-                    std_ok = standardize_clip(trimmed_path, final_path)
-
-                if std_ok:
+            ranked = _rank_instances(instances, preferred_signers)
+            total_instances = len(ranked)
+            for idx, inst in enumerate(ranked, 1):
+                signer = inst.get("signer_id")
+                url = inst.get("url", "")[:60]
+                logger.info(
+                    "  Trying instance %d/%d  signer=%s  url=%s",
+                    idx, total_instances, signer, url,
+                )
+                if _try_download_trim_standardise(inst, aid, final_path):
+                    yt_id = _extract_youtube_id(inst.get("url", ""))
                     asset_entry["source"] = "wlasl"
-                    asset_entry["wlasl_video_id"] = yt_id or wlasl_vid_id
+                    asset_entry["wlasl_video_id"] = yt_id or inst.get("video_id", "")
+                    asset_entry["signer_id"] = signer
                     stats["wlasl"] += 1
-                    logger.info("✓ %s from WLASL (url=%s)", aid, url[:60])
+                    logger.info(
+                        "✓ %s from WLASL  signer=%s  (instance %d/%d)",
+                        aid, signer, idx, total_instances,
+                    )
+                    success = True
+                    break
                 else:
-                    # Fall back to placeholder
-                    logger.warning("Pipeline failed for %s — using placeholder", aid)
-                    shutil.copy2(str(PLACEHOLDER_PATH), final_path)
-                    stats["placeholder"] += 1
+                    logger.info("  ✗ Instance %d/%d failed — trying next", idx, total_instances)
+
+        if not success:
+            if instances:
+                logger.warning(
+                    "All %d instances failed for %s/%s — using placeholder",
+                    len(instances), aid, keyword,
+                )
             else:
-                logger.warning("No usable WLASL instance for %s", keyword)
-                shutil.copy2(str(PLACEHOLDER_PATH), final_path)
-                stats["placeholder"] += 1
-        else:
-            logger.info("Keyword %s not in WLASL — using placeholder", keyword)
+                logger.info("Keyword %s not in WLASL — using placeholder", keyword)
             shutil.copy2(str(PLACEHOLDER_PATH), final_path)
             stats["placeholder"] += 1
 
@@ -265,9 +335,10 @@ def build_all() -> None:
 
     # ── Write manifest ───────────────────────────────────────────────
     manifest = {
-        "version": "1.0",
+        "version": "2.0",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "total_assets": len(manifest_assets),
+        "preferred_signer_ids": preferred_signers,
         "assets": manifest_assets,
     }
     with open(MANIFEST_PATH, "w", encoding="utf-8") as fh:
@@ -275,13 +346,22 @@ def build_all() -> None:
     logger.info("Manifest written → %s", MANIFEST_PATH)
 
     # ── Summary ──────────────────────────────────────────────────────
+    signer_counts: dict[int | None, int] = {}
+    for a in manifest_assets:
+        if a["source"] == "wlasl":
+            s = a.get("signer_id")
+            signer_counts[s] = signer_counts.get(s, 0) + 1
+
     print("\n" + "=" * 50)
     print("  Asset Build Summary")
     print("=" * 50)
     print(f"  Total assets  : {len(manifest_assets)}")
     print(f"  From WLASL    : {stats['wlasl']}")
     print(f"  Placeholder   : {stats['placeholder']}")
-    print(f"  Failed        : {stats['failed']}")
+    if signer_counts:
+        print("  Signer breakdown:")
+        for s, c in sorted(signer_counts.items(), key=lambda x: -x[1]):
+            print(f"    signer {str(s):>4s}  : {c}" if s is not None else f"    unknown     : {c}")
     print("=" * 50)
 
 

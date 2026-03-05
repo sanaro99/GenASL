@@ -5,6 +5,11 @@ matcher:
   confidence_threshold: 0.70
   top_k: 1
 
+build:
+  # Signer preference chain — try signer 9 first (91% keyword coverage,
+  # consistent framing from asl5200), then 109, then 12, then any.
+  preferred_signer_ids: [9, 109, 12]
+
 paths:
   supported_set: "data/supported_set_v1.csv"
   faiss_index: "data/faiss_index.bin"

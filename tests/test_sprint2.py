@@ -33,9 +33,9 @@ _ASSET_CATALOGUE = {
 }
 
 _ASSET_MANIFEST = {
-    "A001": {"file_path": "assets/final/A001.mp4", "duration_ms": 2880, "fps": 25.0, "source": "wlasl", "qa_status": "approved", "width": 320, "height": 240},
-    "A002": {"file_path": "assets/final/A002.mp4", "duration_ms": 2000, "fps": 25.0, "source": "placeholder", "qa_status": "approved", "width": 320, "height": 240},
-    "A003": {"file_path": "assets/final/A003.mp4", "duration_ms": 1500, "fps": 25.0, "source": "wlasl", "qa_status": "approved", "width": 320, "height": 240},
+    "A001": {"file_path": "assets/final/A001_S001_GUM.mp4", "duration_ms": 2880, "fps": 25.0, "source": "wlasl", "qa_status": "approved", "width": 320, "height": 240, "signer_id": 9},
+    "A002": {"file_path": "assets/final/A002_S002_PASSWORD.mp4", "duration_ms": 2000, "fps": 25.0, "source": "placeholder", "qa_status": "approved", "width": 320, "height": 240, "signer_id": None},
+    "A003": {"file_path": "assets/final/A003_S003_HELLO.mp4", "duration_ms": 1500, "fps": 25.0, "source": "wlasl", "qa_status": "approved", "width": 320, "height": 240, "signer_id": 9},
 }
 
 _MATCHED_SEGMENTS = [
@@ -87,7 +87,7 @@ def test_asl_segments_have_asset_metadata(_mock_config):
 
     # Verify exact values for first ASL segment
     first = asl_segments[0]["match"]
-    assert first["asset_file_path"] == "assets/final/A001.mp4"
+    assert first["asset_file_path"] == "assets/final/A001_S001_GUM.mp4"
     assert first["asset_duration_ms"] == 2880
     assert first["asset_fps"] == 25.0
 

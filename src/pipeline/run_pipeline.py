@@ -83,6 +83,7 @@ def _load_asset_manifest() -> dict[str, dict]:
                 "qa_status": entry.get("qa_status"),
                 "width": entry.get("width"),
                 "height": entry.get("height"),
+                "signer_id": entry.get("signer_id"),
             }
     logger.info("Loaded asset manifest: %d assets", len(manifest))
     return manifest
