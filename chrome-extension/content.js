@@ -83,10 +83,17 @@ function ensureOverlay() {
   glossLabel.id = "asl-gloss-label";
   glossLabel.style.display = showGloss ? "block" : "none";
 
-  overlayRoot.appendChild(overlayVideo);
+  // Gloss label must be ABOVE the video — use a wrapper with z-index
+  const videoWrap = document.createElement("div");
+  videoWrap.id = "asl-overlay-video-wrap";
+  videoWrap.appendChild(overlayVideo);
+
+  overlayRoot.appendChild(videoWrap);
   overlayRoot.appendChild(label);
   overlayRoot.appendChild(glossLabel);
   player.appendChild(overlayRoot);
+
+  console.log("[ASL] overlay created, showGloss:", showGloss, "sizeIndex:", sizeIndex);
 
   // Apply saved size
   applySize();
@@ -148,8 +155,9 @@ function attachYTListeners() {
 function applySize() {
   if (!overlayRoot) return;
   const s = SIZES[sizeIndex];
-  overlayRoot.style.width  = s.w + "px";
-  overlayRoot.style.height = s.h + "px";
+  overlayRoot.style.setProperty("width",  s.w + "px", "important");
+  overlayRoot.style.setProperty("height", s.h + "px", "important");
+  console.log("[ASL] applySize:", s.label, s.w + "x" + s.h);
 }
 
 function changeSize(delta) {
@@ -165,6 +173,7 @@ function updateGlossLabel(glosses) {
   currentGlosses = glosses;
   if (glossLabel) {
     glossLabel.textContent = glosses.length ? glosses.join("  ") : "";
+    console.log("[ASL] gloss:", glossLabel.textContent, "visible:", showGloss);
   }
 }
 
