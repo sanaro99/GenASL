@@ -1,8 +1,23 @@
 "use strict";
 
-const toggle     = document.getElementById("toggle");
-const dot        = document.getElementById("dot");
-const statusText = document.getElementById("status-text");
+const toggle      = document.getElementById("toggle");
+const glossToggle = document.getElementById("gloss-toggle");
+const sizeUp      = document.getElementById("size-up");
+const sizeDown    = document.getElementById("size-down");
+const sizeLabel   = document.getElementById("size-label");
+const dot         = document.getElementById("dot");
+const statusText  = document.getElementById("status-text");
+
+// ── Helper: send message to the content script on the active tab ──
+async function sendToContent(message) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return null;
+  return new Promise((resolve) => {
+    chrome.tabs.sendMessage(tab.id, message, (resp) => {
+      resolve(resp || null);
+    });
+  });
+}
 
 // ── Check if the local API server is reachable ─────────────────────
 async function checkServer() {
@@ -21,22 +36,40 @@ async function checkServer() {
   }
 }
 
-// ── Send toggle to content script ──────────────────────────────────
+// ── Enable / disable toggle ────────────────────────────────────────
 toggle.addEventListener("change", async () => {
   const enabled = toggle.checked;
-  // Save preference
   chrome.storage.local.set({ aslEnabled: enabled });
-  // Notify content script on the active tab
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id) {
-    chrome.tabs.sendMessage(tab.id, { type: "asl-toggle", enabled });
-  }
+  await sendToContent({ type: "asl-toggle", enabled });
 });
 
-// ── Init ───────────────────────────────────────────────────────────
-chrome.storage.local.get("aslEnabled", (data) => {
-  const on = data.aslEnabled !== false;   // default: on
-  toggle.checked = on;
+// ── Overlay size buttons ───────────────────────────────────────────
+sizeUp.addEventListener("click", async () => {
+  const resp = await sendToContent({ type: "asl-resize", delta: 1 });
+  if (resp?.sizeLabel) sizeLabel.textContent = resp.sizeLabel;
+});
+
+sizeDown.addEventListener("click", async () => {
+  const resp = await sendToContent({ type: "asl-resize", delta: -1 });
+  if (resp?.sizeLabel) sizeLabel.textContent = resp.sizeLabel;
+});
+
+// ── Gloss text toggle ──────────────────────────────────────────────
+glossToggle.addEventListener("change", async () => {
+  const visible = glossToggle.checked;
+  chrome.storage.local.set({ aslShowGloss: visible });
+  await sendToContent({ type: "asl-gloss-toggle", visible });
+});
+
+// ── Init: restore saved preferences ────────────────────────────────
+chrome.storage.local.get(["aslEnabled", "aslSizeIndex", "aslShowGloss"], (data) => {
+  toggle.checked = data.aslEnabled !== false;        // default: on
+  glossToggle.checked = data.aslShowGloss === true;  // default: off
+
+  // Size label — ask the content script for the current label
+  sendToContent({ type: "asl-status" }).then((resp) => {
+    if (resp?.sizeLabel) sizeLabel.textContent = resp.sizeLabel;
+  });
 });
 
 checkServer();

@@ -52,6 +52,33 @@
     }
     .switch input:checked + .slider { background: #2196f3; }
     .switch input:checked + .slider::before { transform: translateX(18px); }
+    /* Size controls */
+    .size-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .size-btn {
+      width: 28px; height: 28px;
+      border: 1px solid #555;
+      border-radius: 6px;
+      background: #2a2a4a;
+      color: #ccc;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+    .size-btn:hover { background: #3a3a6a; color: #fff; }
+    .size-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #64b5f6;
+      min-width: 24px;
+      text-align: center;
+    }
     /* Status */
     #status {
       margin-top: 10px;
@@ -80,6 +107,23 @@
     <span class="label">Enable overlay</span>
     <label class="switch">
       <input type="checkbox" id="toggle" checked>
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="row">
+    <span class="label">Overlay size</span>
+    <div class="size-controls">
+      <button class="size-btn" id="size-down" title="Smaller">−</button>
+      <span class="size-label" id="size-label">M</span>
+      <button class="size-btn" id="size-up" title="Larger">+</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <span class="label">Show gloss text</span>
+    <label class="switch">
+      <input type="checkbox" id="gloss-toggle">
       <span class="slider"></span>
     </label>
   </div>
