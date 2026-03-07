@@ -8,14 +8,14 @@
 # Gemini  — free tier, set GEMINI_API_KEY env variable
 # OpenAI  — set OPENAI_API_KEY env variable
 llm:
-  provider: "ollama"          # ollama | gemini | openai
+  provider: "gemini"          # ollama | gemini | openai
 
   ollama:
     model: "gemma3:1b"
     base_url: "http://localhost:11434/v1"
 
   gemini:
-    model: "gemini-2.0-flash"  # free tier
+    model: "gemini-2.5-flash"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     # key via env: GEMINI_API_KEY
 
