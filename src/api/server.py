@@ -14,6 +14,7 @@ import asyncio
 import hashlib
 import logging
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -28,26 +29,6 @@ from src.gloss.chainer import chain_clips
 logger = logging.getLogger(__name__)
 
 # ── App setup ──────────────────────────────────────────────────────
-
-app = FastAPI(
-    title="ASL Overlay API",
-    version="1.0.0",
-    description="Translates English captions → ASL gloss → chained video clips",
-)
-
-# Allow the Chrome extension (and localhost dev) to call us
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://www.youtube.com",
-        "chrome-extension://*",
-        "http://localhost:*",
-        "http://127.0.0.1:*",
-    ],
-    allow_origin_regex=r"chrome-extension://.*",
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # ── Lazy-loaded singletons (avoid slow startup on import) ──────────
 
@@ -75,20 +56,45 @@ def _get_lookup() -> WordLookup:
 
 # ── Warm up translator + LLM on server startup ────────────────────
 
-@app.on_event("startup")
-async def _warmup():
+@asynccontextmanager
+async def _lifespan(application: FastAPI):
     """Pre-init translator & send a throwaway query to warm the model."""
     loop = asyncio.get_event_loop()
 
     def _do_warmup():
-        t = _get_translator()
-        _get_lookup()
-        logger.info("Warming up LLM with a dummy translation …")
-        t.translate("hello")
-        logger.info("Warmup complete — model is hot.")
+        try:
+            t = _get_translator()
+            _get_lookup()
+            logger.info("Warming up LLM with a dummy translation …")
+            t.translate("hello")
+            logger.info("Warmup complete — model is hot.")
+        except Exception as exc:
+            logger.warning("Warmup failed (non-fatal, will retry on first request): %s", exc)
 
     await loop.run_in_executor(None, _do_warmup)
+    yield   # server is running
 
+
+app = FastAPI(
+    title="ASL Overlay API",
+    version="1.0.0",
+    description="Translates English captions → ASL gloss → chained video clips",
+    lifespan=_lifespan,
+)
+
+# Allow the Chrome extension (and localhost dev) to call us
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://www.youtube.com",
+        "chrome-extension://*",
+        "http://localhost:*",
+        "http://127.0.0.1:*",
+    ],
+    allow_origin_regex=r"chrome-extension://.*",
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ── Request / response models ──────────────────────────────────────
 
