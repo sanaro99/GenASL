@@ -16,7 +16,7 @@
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.3s ease, width 0.2s ease, height 0.2s ease;
 }
 
 #asl-overlay-root.asl-visible {
@@ -47,11 +47,32 @@
   pointer-events: none;
 }
 
+/* ── Gloss word overlay ─────────────────────────────────────────── */
+#asl-gloss-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.7);
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  font-family: 'Segoe UI', system-ui, monospace;
+}
+
+#asl-gloss-label.asl-gloss-visible {
+  opacity: 1;
+}
+
 /* ── Fullscreen adjustments ─────────────────────────────────────── */
 :fullscreen #asl-overlay-root,
 :-webkit-full-screen #asl-overlay-root {
-  width: 280px;
-  height: 230px;
   bottom: 80px;
   right: 20px;
 }
