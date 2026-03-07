@@ -177,6 +177,11 @@ class GlossTranslator:
         self._model = model
         self._api_key = api_key or resolved_key
 
+        # Gemma models served via the Gemini API don't support the
+        # "system" role (developer instructions).  We fold the system
+        # prompt into the first user message instead.
+        self._system_as_user = model.startswith("gemma")
+
         # Use compact prompt for local models (saves ~4000 tokens of prompt
         # processing on every call), full prompt for cloud providers.
         if provider == "ollama":
@@ -217,12 +222,19 @@ class GlossTranslator:
         list[str]
             Ordered list of ASL gloss words, e.g. ["LIBRARY", "WHERE"].
         """
-        response = self._client.chat.completions.create(
-            model=self._model,
-            messages=[
+        if self._system_as_user:
+            messages = [
+                {"role": "user", "content": self._system_prompt + "\n\n" + english_text.strip()},
+            ]
+        else:
+            messages = [
                 {"role": "system", "content": self._system_prompt},
                 {"role": "user", "content": english_text.strip()},
-            ],
+            ]
+
+        response = self._client.chat.completions.create(
+            model=self._model,
+            messages=messages,
             temperature=0.1,
             max_tokens=200,
         )

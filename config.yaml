@@ -15,7 +15,7 @@ llm:
     base_url: "http://localhost:11434/v1"
 
   gemini:
-    model: "gemini-2.5-flash"
+    model: "gemma-3-27b-it"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     # key via env: GEMINI_API_KEY
 

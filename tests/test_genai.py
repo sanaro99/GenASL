@@ -39,6 +39,7 @@ class TestGlossTranslator:
         translator._client.chat.completions.create.return_value = mock_response
         translator._model = "gpt-4o-mini"
         translator._system_prompt = "test prompt"
+        translator._system_as_user = False
 
         result = translator.translate("Where is the library?")
         assert result == ["LIBRARY", "WHERE"]
@@ -56,6 +57,7 @@ class TestGlossTranslator:
         translator._client.chat.completions.create.return_value = mock_response
         translator._model = "gpt-4o-mini"
         translator._system_prompt = "test"
+        translator._system_as_user = False
 
         segments = [
             {"segment_id": "SEG_001", "text": "She is very happy today."},
@@ -75,6 +77,7 @@ class TestGlossTranslator:
         translator._client.chat.completions.create.side_effect = RuntimeError("API down")
         translator._model = "gpt-4o-mini"
         translator._system_prompt = "test"
+        translator._system_as_user = False
 
         segments = [{"segment_id": "SEG_001", "text": "Hello world."}]
         result = translator.translate_segments(segments)
