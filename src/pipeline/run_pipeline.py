@@ -26,6 +26,9 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from src.transcript_ingestion.fetcher import fetch_transcript, NoTranscriptError
 from src.matcher.matcher import Matcher
+from src.gloss.translator import GlossTranslator
+from src.gloss.word_lookup import WordLookup
+from src.gloss.chainer import chain_clips
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +128,40 @@ logger.info("Log file: %s", LOGS_DIR / "pipeline_debug.log")
 
 
 # ---------------------------------------------------------------------------
+# Short-segment filter (Sprint 3 — Issue 4 fix)
+# ---------------------------------------------------------------------------
+
+_MIN_WORD_COUNT = 3
+_MIN_DURATION_MS = 2000
+
+
+def _filter_short_segments(segments: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Remove auto-caption artefacts that are too short to be meaningful.
+
+    A segment is filtered when it has fewer than ``_MIN_WORD_COUNT`` words
+    **or** a duration shorter than ``_MIN_DURATION_MS`` milliseconds.
+
+    Returns ``(kept, filtered)`` — two lists of segment dicts.
+    """
+    kept: list[dict] = []
+    filtered: list[dict] = []
+    for seg in segments:
+        word_count = len(seg["text"].split())
+        duration = seg["end_ms"] - seg["start_ms"]
+        if word_count < _MIN_WORD_COUNT or duration < _MIN_DURATION_MS:
+            logger.info(
+                "FILTERED %s — %d words, %d ms: %r",
+                seg["segment_id"], word_count, duration, seg["text"],
+            )
+            filtered.append(seg)
+        else:
+            kept.append(seg)
+    if filtered:
+        logger.info("Filtered %d short/artefact segments", len(filtered))
+    return kept, filtered
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -134,6 +171,7 @@ def _build_render_plan(
     matched_segments: list[dict],
     asset_catalogue: dict[str, dict],
     asset_manifest: dict[str, dict] | None = None,
+    filtered_segments: list[dict] | None = None,
 ) -> dict:
     """Assemble a structured render-plan dict suitable for 3D mapping ingestion."""
     cfg = _load_config()
@@ -220,6 +258,27 @@ def _build_render_plan(
     asl_count = sum(1 for s in matched_segments if s["action"] == "ASL")
     cap_count = len(matched_segments) - asl_count
     total = len(matched_segments)
+    filtered_count = len(filtered_segments) if filtered_segments else 0
+
+    # Build filtered segment entries (action: "FILTERED")
+    filtered_entries: list[dict] = []
+    if filtered_segments:
+        for seg in filtered_segments:
+            start = seg["start_ms"]
+            end = seg["end_ms"]
+            dur = end - start
+            filtered_entries.append({
+                "segment_id": seg["segment_id"],
+                "source_text": seg["text"],
+                "timing": {
+                    "start_ms": start,
+                    "end_ms": end,
+                    "duration_ms": dur,
+                    "start_tc": _ms_to_timecode(start),
+                    "end_tc": _ms_to_timecode(end),
+                },
+                "match": {"action": "FILTERED", "reason": "short_or_artefact"},
+            })
 
     return {
         "schema_version": "2.0",
@@ -237,9 +296,11 @@ def _build_render_plan(
             "total_segments": total,
             "asl_segments": asl_count,
             "captions_segments": cap_count,
+            "filtered_segments": filtered_count,
             "asl_ratio": round(asl_count / total, 4) if total else 0.0,
         },
         "segments": structured_segments,
+        "filtered_segments": filtered_entries,
         "asl_overlay_track": asl_overlay_track,
     }
 
@@ -267,6 +328,136 @@ def _responsible_ai_warnings(plan: dict) -> None:
             asl,
             total,
         )
+
+
+# ---------------------------------------------------------------------------
+# GenAI gloss-based render plan builder
+# ---------------------------------------------------------------------------
+
+def _build_gloss_render_plan(
+    run_id: str,
+    video_id: str,
+    gloss_segments: list[dict],
+    filtered_segments: list[dict] | None = None,
+) -> dict:
+    """Build a render plan from LLM-translated gloss segments with chained word clips.
+
+    Each segment has been enriched with ``gloss_sequence``, ``word_clips``
+    (from WordLookup), and ``chained_clip`` (from the chainer).
+    """
+    cfg = _load_config()
+    generated_at = datetime.now(timezone.utc).isoformat()
+
+    structured_segments: list[dict] = []
+    asl_overlay_track: list[dict] = []
+    asl_count = 0
+    cap_count = 0
+
+    for seg in gloss_segments:
+        start = seg["start_ms"]
+        end = seg["end_ms"]
+        dur = end - start
+        chained = seg.get("chained_clip")
+        gloss_seq = seg.get("gloss_sequence", [])
+        word_clips = seg.get("word_clips", [])
+        found_count = sum(1 for wc in word_clips if wc.get("found"))
+
+        if chained and found_count > 0:
+            action = "ASL"
+            asl_count += 1
+            coverage = round(found_count / len(gloss_seq), 4) if gloss_seq else 0
+        else:
+            action = "CAPTIONS"
+            cap_count += 1
+            coverage = 0
+
+        entry = {
+            "segment_id": seg["segment_id"],
+            "source_text": seg["text"],
+            "timing": {
+                "start_ms": start,
+                "end_ms": end,
+                "duration_ms": dur,
+                "start_tc": _ms_to_timecode(start),
+                "end_tc": _ms_to_timecode(end),
+            },
+            "match": {
+                "action": action,
+                "gloss_sequence": gloss_seq,
+                "gloss_text": seg.get("gloss_text", ""),
+                "word_coverage": coverage,
+                "found_glosses": [wc["gloss"] for wc in word_clips if wc.get("found")],
+                "missing_glosses": [wc["gloss"] for wc in word_clips if not wc.get("found")],
+                "chained_clip_path": chained["rel_path"] if chained else None,
+                "chained_duration_ms": chained["duration_ms"] if chained else None,
+                "chained_clip_count": chained["clip_count"] if chained else 0,
+            },
+        }
+        structured_segments.append(entry)
+
+        if action == "ASL" and chained:
+            asl_overlay_track.append({
+                "segment_id": seg["segment_id"],
+                "asset_id": None,
+                "sentence_id": None,
+                "start_ms": start,
+                "end_ms": end,
+                "start_tc": _ms_to_timecode(start),
+                "end_tc": _ms_to_timecode(end),
+                "asset_file_path": chained["rel_path"],
+                "asset_duration_ms": chained["duration_ms"],
+                "asset_fps": 25.0,
+                "score": coverage,
+                "gloss_sequence": gloss_seq,
+            })
+
+    total = asl_count + cap_count
+    filtered_count = len(filtered_segments) if filtered_segments else 0
+
+    filtered_entries: list[dict] = []
+    if filtered_segments:
+        for seg in filtered_segments:
+            start = seg["start_ms"]
+            end = seg["end_ms"]
+            dur = end - start
+            filtered_entries.append({
+                "segment_id": seg["segment_id"],
+                "source_text": seg["text"],
+                "timing": {
+                    "start_ms": start,
+                    "end_ms": end,
+                    "duration_ms": dur,
+                    "start_tc": _ms_to_timecode(start),
+                    "end_tc": _ms_to_timecode(end),
+                },
+                "match": {"action": "FILTERED", "reason": "short_or_artefact"},
+            })
+
+    return {
+        "schema_version": "3.0",
+        "run_id": run_id,
+        "video_id": video_id,
+        "generated_at": generated_at,
+        "pipeline": {
+            "mode": "genai_gloss",
+            "provider": cfg.get("llm", {}).get("provider", "ollama"),
+            "model": cfg.get("llm", {}).get(
+                cfg.get("llm", {}).get("provider", "ollama"), {}
+            ).get("model", "llama3.2"),
+            "confidence_threshold": cfg["matcher"]["confidence_threshold"],
+            "supported_set": cfg["paths"]["supported_set"],
+        },
+        "summary": {
+            "total_segments": total,
+            "asl_segments": asl_count,
+            "captions_segments": cap_count,
+            "filtered_segments": filtered_count,
+            "asl_ratio": round(asl_count / total, 4) if total else 0.0,
+        },
+        "segments": structured_segments,
+        "filtered_segments": filtered_entries,
+        "asl_overlay_track": asl_overlay_track,
+    }
 
 
 def _save_render_plan(plan: dict) -> Path:
@@ -325,6 +516,70 @@ def _detect_timing_overlaps(plan: dict) -> int:
     return overlap_count
 
 
+# ---------------------------------------------------------------------------
+# Overlap resolution (Sprint 3 — Issue 3 fix)
+# ---------------------------------------------------------------------------
+
+def _resolve_overlaps(plan: dict) -> int:
+    """Resolve overlapping ASL overlay entries by keeping the higher-scoring match.
+
+    When two consecutive ASL clips overlap in time the lower-scoring entry is
+    marked ``kept: False`` so the compositor can skip it.  The higher-scoring
+    entry is marked ``kept: True``.  This prevents two clips from playing
+    simultaneously.
+
+    Returns the number of conflicts resolved.
+    """
+    track = plan.get("asl_overlay_track", [])
+    resolved = 0
+
+    # Initialise all entries as kept
+    for entry in track:
+        entry.setdefault("kept", True)
+
+    i = 0
+    while i < len(track) - 1:
+        cur = track[i]
+        nxt = track[i + 1]
+
+        if not cur.get("kept", True):
+            i += 1
+            continue
+
+        asset_dur = cur.get("asset_duration_ms")
+        if asset_dur is None:
+            i += 1
+            continue
+
+        cur_end = cur["start_ms"] + asset_dur
+        if cur_end > nxt["start_ms"]:
+            # Overlap — keep higher score
+            cur_score = cur.get("score", 0)
+            nxt_score = nxt.get("score", 0)
+
+            if cur_score >= nxt_score:
+                loser, winner = nxt, cur
+            else:
+                loser, winner = cur, nxt
+
+            loser["kept"] = False
+            winner["kept"] = True
+            resolved += 1
+
+            logger.info(
+                "OVERLAP RESOLVED: kept %s (score=%.4f), dropped %s (score=%.4f)",
+                winner["segment_id"], winner.get("score", 0),
+                loser["segment_id"], loser.get("score", 0),
+            )
+
+        i += 1
+
+    if resolved:
+        logger.info("Total overlaps resolved: %d", resolved)
+    plan["summary"]["overlaps_resolved"] = resolved
+    return resolved
+
+
 def _append_run_log(
     plan: dict,
     output_file: str,
@@ -358,10 +613,13 @@ def _append_run_log(
         "total_segments": summary["total_segments"],
         "asl_segments": summary["asl_segments"],
         "captions_segments": summary["captions_segments"],
+        "filtered_segments": summary.get("filtered_segments", 0),
         "output_file": output_file,
         "assets_used": len(asset_ids_used),
         "placeholder_count": placeholder_count,
         "timing_overlaps": timing_overlaps,
+        "overlaps_resolved": summary.get("overlaps_resolved", 0),
+        "confidence_threshold": plan.get("pipeline", {}).get("confidence_threshold"),
     }
     with open(log_path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -372,8 +630,12 @@ def _print_summary(plan: dict) -> None:
     total = summary["total_segments"]
     asl = summary["asl_segments"]
     cap = summary["captions_segments"]
+    filt = summary.get("filtered_segments", 0)
     pct_asl = (asl / total * 100) if total else 0
     pct_cap = (cap / total * 100) if total else 0
+
+    pipeline_info = plan.get("pipeline", {})
+    mode = pipeline_info.get("mode", "legacy")
 
     print("\n" + "=" * 50)
     print("  GenASL Pipeline — Run Summary")
@@ -382,11 +644,12 @@ def _print_summary(plan: dict) -> None:
     print(f"  Run ID      : {plan['run_id']}")
     print(f"  Video ID    : {plan['video_id']}")
     print(f"  Generated   : {plan['generated_at']}")
-    print(f"  Model       : {plan['pipeline']['model']}")
-    print(f"  Threshold   : {plan['pipeline']['confidence_threshold']}")
+    print(f"  Mode        : {mode}")
+    print(f"  Model       : {pipeline_info.get('model', 'n/a')}")
     print(f"  Total segs  : {total}")
     print(f"  ASL segs    : {asl:>4d}  ({pct_asl:5.1f}%)")
     print(f"  CAPTIONS    : {cap:>4d}  ({pct_cap:5.1f}%)")
+    print(f"  FILTERED    : {filt:>4d}")
     print(f"  ASL track   : {len(plan['asl_overlay_track'])} entries")
     print("=" * 50 + "\n")
 
@@ -396,13 +659,23 @@ def _print_summary(plan: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def run(video_id: str) -> dict:
-    """Execute the full pipeline and return the render plan dict."""
-    run_id = uuid.uuid4().hex[:12]
+    """Execute the full pipeline and return the render plan dict.
 
-    # 0. Load asset catalogue and manifest for enrichment
+    Uses the GenAI gloss-based flow:
+      1. Fetch transcript
+      2. Filter short segments
+      3. LLM translates each segment → ASL gloss sequence
+      4. Word lookup → map each gloss to word clip
+      5. Chain word clips → one chained video per segment
+      6. Build render plan
+      7. RAI checks + overlap resolution
+    """
+    run_id = uuid.uuid4().hex[:12]
+    cfg = _load_config()
+
+    # 0. Load legacy asset catalogue for backward compat logging
     asset_catalogue = _load_asset_catalogue()
     logger.info("Loaded asset catalogue: %d phrases", len(asset_catalogue))
-    asset_manifest = _load_asset_manifest()
 
     # 1. Fetch transcript
     logger.info("=" * 60)
@@ -411,66 +684,104 @@ def run(video_id: str) -> dict:
     segments = fetch_transcript(video_id)
     logger.info("Fetched %d sentence-level segments", len(segments))
 
-    # 2. Match against supported set
-    logger.info("=" * 60)
-    logger.info("STEP 2 — Semantic matching against supported ASL set")
-    logger.info("=" * 60)
-    logger.info("Loading matcher …")
-    matcher = Matcher()
-    matched = matcher.match_all(segments)
+    # 1b. Filter short / artefact segments (Sprint 3 — Issue 4)
+    logger.info("Filtering short / artefact segments ...")
+    segments, filtered_segments = _filter_short_segments(segments)
+    logger.info(
+        "After filter: %d kept, %d filtered",
+        len(segments), len(filtered_segments),
+    )
 
-    # 3. Per-segment detail table for evaluators
+    # 2. LLM Gloss Translation (GenAI)
     logger.info("=" * 60)
-    logger.info("STEP 3 — Segment detail table")
+    logger.info("STEP 2 — LLM English-to-ASL gloss translation")
     logger.info("=" * 60)
-    for seg in matched:
+    translator = GlossTranslator()
+    gloss_segments = translator.translate_segments(segments)
+
+    # 3. Word Lookup — resolve each gloss to a word clip
+    logger.info("=" * 60)
+    logger.info("STEP 3 — Word-level clip lookup")
+    logger.info("=" * 60)
+    word_lookup = WordLookup()
+    for seg in gloss_segments:
+        glosses = seg.get("gloss_sequence", [])
+        if glosses:
+            seg["word_clips"] = word_lookup.lookup_sequence(glosses)
+        else:
+            seg["word_clips"] = []
+
+    # 4. Chain word clips into one video per segment
+    logger.info("=" * 60)
+    logger.info("STEP 4 — Chaining word clips per segment")
+    logger.info("=" * 60)
+    for seg in gloss_segments:
+        word_clips = seg.get("word_clips", [])
+        if word_clips and any(wc.get("found") for wc in word_clips):
+            chained = chain_clips(word_clips, seg["segment_id"])
+            seg["chained_clip"] = chained
+        else:
+            seg["chained_clip"] = None
+
+    # 5. Per-segment detail table for evaluators
+    logger.info("=" * 60)
+    logger.info("STEP 5 — Segment detail table")
+    logger.info("=" * 60)
+    for seg in gloss_segments:
+        chained = seg.get("chained_clip")
+        word_clips = seg.get("word_clips", [])
+        found = sum(1 for wc in word_clips if wc.get("found"))
+        total_g = len(seg.get("gloss_sequence", []))
         logger.info(
-            "  %-8s | %-8s | score=%.4f | sid=%-6s | %d–%d ms | %r",
+            "  %-8s | gloss=%s | clips=%d/%d | chained=%s | %d-%d ms | %r",
             seg["segment_id"],
-            seg["action"],
-            seg["score"],
-            seg.get("sentence_id") or "—",
+            seg.get("gloss_text", "")[:40],
+            found, total_g,
+            "yes" if chained else "no",
             seg["start_ms"],
             seg["end_ms"],
             seg["text"][:60],
         )
 
-    # 4. Build render plan (enriched with manifest clip metadata)
+    # 6. Build render plan
     logger.info("=" * 60)
-    logger.info("STEP 4 — Building render plan")
+    logger.info("STEP 6 — Building render plan")
     logger.info("=" * 60)
-    plan = _build_render_plan(run_id, video_id, matched, asset_catalogue, asset_manifest)
+    plan = _build_gloss_render_plan(run_id, video_id, gloss_segments, filtered_segments)
 
-    # 5. Responsible-AI checks
-    logger.info("Running responsible-AI checks …")
+    # 7. Responsible-AI checks
+    logger.info("Running responsible-AI checks ...")
     _responsible_ai_warnings(plan)
 
-    # 5b. Timing overlap validation (Sprint 2)
-    logger.info("Running timing overlap validation …")
+    # 7b. Timing overlap validation (Sprint 2)
+    logger.info("Running timing overlap validation ...")
     timing_overlaps = _detect_timing_overlaps(plan)
 
-    # 6. Save render plan (separate try so run_log still gets written)
+    # 7c. Resolve overlaps (Sprint 3)
+    logger.info("Resolving timing overlaps ...")
+    _resolve_overlaps(plan)
+
+    # 8. Save render plan
     output_file = ""
     try:
         out_path = _save_render_plan(plan)
         output_file = str(out_path)
-        logger.info("Render plan saved → %s", out_path)
+        logger.info("Render plan saved -> %s", out_path)
     except Exception:
         logger.exception("Failed to save render plan JSON")
 
-    # 7. Append run log (must always succeed independently)
+    # 9. Append run log
     try:
-        _append_run_log(plan, output_file, asset_manifest, timing_overlaps)
-        logger.info("Run log entry appended → logs/run_log.jsonl")
+        _append_run_log(plan, output_file, timing_overlaps=timing_overlaps)
+        logger.info("Run log entry appended -> logs/run_log.jsonl")
     except Exception:
         logger.exception("Failed to append run log entry")
 
-    # 8. Print human-readable summary
+    # 10. Print human-readable summary
     _print_summary(plan)
     logger.info("Full debug log written to: %s", LOGS_DIR / "pipeline_debug.log")
 
     return plan
-
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

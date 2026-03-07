@@ -1,14 +1,64 @@
 # GenASL Pipeline Configuration
 
+# --- LLM provider for English-to-ASL gloss translation ---
+# Supported providers: ollama (local, free), gemini (free tier), openai
+#
+# Ollama  — runs locally, no API key needed.  Install: https://ollama.com
+#           Then: ollama pull llama3.2
+# Gemini  — free tier, set GEMINI_API_KEY env variable
+# OpenAI  — set OPENAI_API_KEY env variable
+llm:
+  provider: "ollama"          # ollama | gemini | openai
+
+  ollama:
+    model: "gemma3:1b"
+    base_url: "http://localhost:11434/v1"
+
+  gemini:
+    model: "gemini-2.0-flash"  # free tier
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+    # key via env: GEMINI_API_KEY
+
+  openai:
+    model: "gpt-4o-mini"
+    # key via env: OPENAI_API_KEY
+
 matcher:
   model_name: "all-MiniLM-L6-v2"
-  confidence_threshold: 0.70
+
+  # confidence_threshold — minimum cosine-similarity score for a transcript
+  # segment to be matched to a Supported Set ASL clip.  Segments scoring
+  # below this value fall back to burned-in captions (action: CAPTIONS).
+  #
+  # RAI rationale: This is the primary allowlist gate.  Lowering the
+  # threshold lets borderline, potentially incorrect matches through
+  # (see Sprint 2 retro Issue 1: SEG_002 matched at 0.72 with a
+  # 16-second intro monologue).  Any change to this value must be
+  # reviewed and documented in docs/governance_notes.md.
+  #
+  # History:
+  #   Sprint 1  — 0.80 (original design)
+  #   Sprint 2  — 0.70 (undocumented change, reverted in Sprint 3)
+  #   Sprint 3  — 0.80 (restored)
+  confidence_threshold: 0.80
+
   top_k: 1
 
 build:
   # Signer preference chain — try signer 9 first (91% keyword coverage,
   # consistent framing from asl5200), then 109, then 12, then any.
   preferred_signer_ids: [9, 109, 12]
+
+# --- BBC Learning English test videos (Easy English Conversations) ---
+test_videos:
+  - id: "I_tRSrPru94"
+    title: "Easy English Conversations Episode 1"
+  - id: "31y2Bq1RYQA"
+    title: "Easy English Conversations Episode 2"
+  - id: "on_1sS6Ii8M"
+    title: "Easy English Conversations Episode 3"
+  - id: "bq6GBbh3uhU"
+    title: "Easy English Conversations Episode 4"
 
 paths:
   supported_set: "data/supported_set_v1.csv"
