@@ -10,6 +10,9 @@
 
 const API_BASE = "http://127.0.0.1:8794";   // local FastAPI server
 const POLL_MS  = 250;                        // caption-check interval
+const DEBOUNCE_MS = 600;                     // wait for caption to settle before API call
+const PLAYBACK_MIN = 0.7;                    // minimum playback rate
+const PLAYBACK_MAX = 2.5;                    // maximum playback rate
 
 // Overlay size presets (index into SIZES)
 const SIZES = [
@@ -33,6 +36,43 @@ let showGloss     = false;  // gloss word overlay visibility
 let currentGlosses = [];    // glosses for the current clip
 let ytVideoListenersAttached = false;
 
+// Timing: track when each caption appeared to measure speech pace
+let lastCaptionTime = 0;    // Date.now() when the last caption changed
+let debounceTimer  = null;  // debounce timer for API calls
+
+// ── Client-side LRU cache (avoids hitting API for repeated captions) ──
+const _clientCache = new Map();  // normalised text → API response data
+const _CLIENT_CACHE_MAX = 200;
+
+function _cacheKey(text) {
+  return text.trim().toLowerCase();
+}
+
+function _clientCacheGet(text) {
+  const k = _cacheKey(text);
+  if (_clientCache.has(k)) {
+    // Move to end (most recently used)
+    const val = _clientCache.get(k);
+    _clientCache.delete(k);
+    _clientCache.set(k, val);
+    return val;
+  }
+  return null;
+}
+
+function _clientCacheSet(text, data) {
+  const k = _cacheKey(text);
+  if (_clientCache.size >= _CLIENT_CACHE_MAX) {
+    // Delete oldest entry
+    const first = _clientCache.keys().next().value;
+    _clientCache.delete(first);
+  }
+  _clientCache.set(k, data);
+}
+
+// ── In-flight dedup: don't send the same request twice concurrently ──
+const _inflightRequests = new Set();
+
 // ── Helpers ────────────────────────────────────────────────────────
 
 /** Find the YouTube <video> element. */
@@ -49,10 +89,7 @@ function getPlayerContainer() {
 
 /** Read the currently-visible caption text from the DOM. */
 function getCurrentCaption() {
-  // YouTube renders captions in a container with this class
-  const segments = document.querySelectorAll(
-    ".ytp-caption-segment"
-  );
+  const segments = document.querySelectorAll(".ytp-caption-segment");
   if (segments.length === 0) return "";
   return Array.from(segments).map(s => s.textContent.trim()).join(" ");
 }
@@ -140,6 +177,8 @@ function attachYTListeners() {
     console.log("[ASL] YT seeked — clearing clip queue");
     clipQueue = [];
     lastCaption = "";       // allow re-processing of the caption at new position
+    lastCaptionTime = 0;    // reset adaptive speed baseline
+    if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
     if (overlayVideo && isPlaying) {
       overlayVideo.pause();
       overlayVideo.removeAttribute("src");
@@ -184,8 +223,8 @@ function setGlossVisible(visible) {
 
 // ── Clip queue management ──────────────────────────────────────────
 
-function enqueueClip(url, glosses) {
-  clipQueue.push({ url, glosses });
+function enqueueClip(url, glosses, clipDurationMs) {
+  clipQueue.push({ url, glosses, clipDurationMs: clipDurationMs || 0 });
   if (!isPlaying) playNextClip();
 }
 
@@ -209,18 +248,56 @@ function playNextClip() {
   overlayVideo.src = item.url;
   overlayRoot.classList.add("asl-visible");
   updateGlossLabel(item.glosses || []);
+
+  // ── Adaptive playback speed ──────────────────────────────────
+  // Compute how fast to play this clip so it finishes roughly in
+  // time for the next caption.  Uses the time gap between the
+  // previous caption arrival and this one as "available time".
+  if (item.clipDurationMs > 0 && lastCaptionTime > 0) {
+    const now = Date.now();
+    const availableMs = now - lastCaptionTime;
+    if (availableMs > 0) {
+      const idealRate = item.clipDurationMs / availableMs;
+      const rate = Math.min(PLAYBACK_MAX, Math.max(PLAYBACK_MIN, idealRate));
+      overlayVideo.playbackRate = rate;
+      console.log("[ASL] adaptive rate:", rate.toFixed(2),
+        `(clip ${item.clipDurationMs}ms / avail ${availableMs}ms)`);
+    } else {
+      overlayVideo.playbackRate = 1.0;
+    }
+  } else {
+    overlayVideo.playbackRate = 1.0;
+  }
+
   overlayVideo.play().catch(err => {
     console.warn("[ASL] play() rejected:", err);
     playNextClip();
   });
 }
 
-// ── Caption → ASL pipeline ─────────────────────────────────────────
+// ── Caption → ASL pipeline (with debounce + cache) ─────────────────
 
 async function processCaption(text) {
-  if (!text || text === lastCaption) return;
-  lastCaption = text;
+  if (!text) return;
 
+  // ── Client-side cache hit: skip network entirely ──
+  const cached = _clientCacheGet(text);
+  if (cached) {
+    console.log("[ASL] client cache hit");
+    if (cached.clip_url) {
+      enqueueClip(cached.clip_url, cached.glosses || [], cached.clip_duration_ms || 0);
+    }
+    return;
+  }
+
+  // ── In-flight dedup: don't send the same caption twice ──
+  const key = _cacheKey(text);
+  if (_inflightRequests.has(key)) {
+    console.log("[ASL] request already in-flight, skipping");
+    return;
+  }
+
+  _inflightRequests.add(key);
   try {
     const resp = await fetch(`${API_BASE}/asl`, {
       method: "POST",
@@ -232,17 +309,20 @@ async function processCaption(text) {
       return;
     }
     const data = await resp.json();
-    // data: { clip_url, glosses, found, missing }
+    // Cache the response for future use
+    _clientCacheSet(text, data);
     if (data.clip_url) {
-      enqueueClip(data.clip_url, data.glosses || []);
+      enqueueClip(data.clip_url, data.glosses || [], data.clip_duration_ms || 0);
     }
   } catch (err) {
     // Server down — silently ignore so we don't spam console
     if (err.name !== "TypeError") console.warn("[ASL] fetch error:", err);
+  } finally {
+    _inflightRequests.delete(key);
   }
 }
 
-// ── Main poll loop ─────────────────────────────────────────────────
+// ── Main poll loop (with debounce) ─────────────────────────────────
 
 function tick() {
   if (!enabled) return;
@@ -252,15 +332,24 @@ function tick() {
 
   ensureOverlay();
 
-  // Still poll captions even when paused (don't skip) — the queue
-  // will just wait until YT resumes.  But only send new captions
-  // when the video is actually playing.
+  // Don't process while paused — queue will wait for YT resume
   if (ytVid.paused) return;
 
   const caption = getCurrentCaption();
-  if (caption && caption !== lastCaption) {
+  if (!caption || caption === lastCaption) return;
+
+  // Caption changed — record the time for adaptive playback speed
+  lastCaptionTime = Date.now();
+  lastCaption = caption;
+
+  // Debounce: wait DEBOUNCE_MS for the caption to settle before
+  // firing an API call.  If the caption changes again within the
+  // window, we restart the timer (only the final text gets sent).
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    debounceTimer = null;
     processCaption(caption);
-  }
+  }, DEBOUNCE_MS);
 }
 
 function startPolling() {
@@ -293,6 +382,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
     enabled = changes.aslEnabled.newValue;
     if (!enabled) {
       stopPolling();
+      if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+      lastCaptionTime = 0;
       if (overlayRoot) overlayRoot.classList.remove("asl-visible");
       clipQueue = [];
       isPlaying = false;
@@ -307,6 +398,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     enabled = msg.enabled;
     if (!enabled) {
       stopPolling();
+      if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+      lastCaptionTime = 0;
       if (overlayRoot) overlayRoot.classList.remove("asl-visible");
       clipQueue = [];
       isPlaying = false;
@@ -333,9 +426,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 function onNavigate() {
   lastCaption = "";
+  lastCaptionTime = 0;
   clipQueue = [];
   isPlaying = false;
   ytVideoListenersAttached = false;   // new video element after navigation
+  if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
   // Re-check for the player after YouTube's SPA navigation
   setTimeout(() => {
     if (location.pathname === "/watch") {

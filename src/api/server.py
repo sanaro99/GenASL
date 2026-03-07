@@ -101,6 +101,7 @@ class AslResponse(BaseModel):
     found: list[str]
     missing: list[str]
     clip_url: str | None = None
+    clip_duration_ms: int = 0
     cached: bool = False
 
 
@@ -131,17 +132,20 @@ def _translate_sync(text: str, ck: str) -> dict:
     missing = [e["gloss"] for e in entries if not e["found"]]
 
     clip_url = None
+    clip_duration_ms = 0
     if found:
         clip_name = f"ext_{ck}"
         result = chain_clips(entries, clip_name)
         if result and Path(result["path"]).is_file():
             clip_url = f"http://127.0.0.1:8794/clips/{clip_name}.mp4"
+            clip_duration_ms = result.get("duration_ms", 0)
 
     resp = {
         "glosses": glosses,
         "found": found,
         "missing": missing,
         "clip_url": clip_url,
+        "clip_duration_ms": clip_duration_ms,
         "cached": False,
     }
     if len(_response_cache) >= _MAX_CACHE:
