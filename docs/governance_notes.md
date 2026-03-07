@@ -47,3 +47,84 @@ production-facing release.
 - Only final, approved clips (50 files) are retained in `assets/final/`.
 - No personally identifiable information is stored in the asset manifest or
   render plan.
+
+---
+
+## Sprint 3: End-to-End Overlay, Pilot & Responsible AI
+
+### Confidence threshold restoration
+
+The matcher confidence threshold was reverted from 0.70 (undocumented Sprint 2
+change) back to the designed value of **0.80**.  At 0.70, borderline matches
+slipped through the allowlist gate — for example, a 16-second intro monologue
+matched a Supported Set phrase at only 0.72 (Sprint 2 retro Issue 1).
+
+The threshold is now documented in `config.yaml` with an explanatory comment
+block covering its purpose, RAI rationale, and change history.  Any future
+change must be reviewed and recorded in this document.
+
+### Transcript normalization fixes
+
+Two normalization issues were resolved:
+
+1. **Bracket tag stripping:** Auto-caption tags like `[music]` and `[applause]`
+   were diluting sentence embeddings and suppressing valid matches.  The
+   normaliser now strips all `[…]` content before embedding.  This recovered
+   previously missed matches (e.g. "Do you need help?" went from 0.58 to a
+   correct ASL match).
+
+2. **Short segment filter:** Artefact segments with fewer than 3 words or
+   shorter than 2 seconds (e.g. "cc.", "point.") are now filtered before
+   reaching the matcher.  These are logged as `action: "FILTERED"` in the
+   render plan for transparency.
+
+### Overlap resolution
+
+When consecutive ASL overlay clips overlap in time, the pipeline now
+automatically resolves the conflict by keeping the higher-scoring match and
+marking the lower-scoring entry as `kept: False`.  Each resolution is logged
+with segment IDs and scores.  The compositor skips non-kept entries, ensuring
+no two ASL clips play simultaneously.
+
+### Transparency / disclosure label
+
+The disclosure label **"AI-generated ASL overlay (POC)"** is burned directly
+into the composited output video using FFmpeg's `drawtext` filter.  It is
+visible at all times during playback — it is part of the video itself, not
+removable UI chrome.  This meets the CVAA/ADA-informed requirement that viewers
+always understand they are seeing a machine-generated overlay.
+
+### Original captions preserved
+
+The PiP compositor overlays ASL clips in a bottom-right window (~25% of screen
+width) and never modifies or suppresses the original video captions.  For
+segments with `action: "CAPTIONS"`, no overlay is shown and the original
+caption track plays unaltered.
+
+### Pilot design
+
+- Participants are briefed before each session that this is a student POC with
+  word-level clips only and known limitations.  Informed consent is obtained.
+- Feedback is collected anonymously using a standard form (1–5 star rating,
+  issue checkboxes, free-text, disclosure label noticed yes/no).
+- No personally identifiable information is retained in pilot data.
+- If no DHH participants are available, this is documented as an explicit
+  limitation of the pilot findings.
+
+### Updated risk assessment — Sprint 3
+
+| Risk | Status | Evidence |
+|------|--------|----------|
+| Incorrect ASL match shown | Mitigated | Threshold restored to 0.80; bracket stripping recovers valid matches |
+| Two ASL clips playing simultaneously | Mitigated | Overlap resolution keeps only higher-scoring entry |
+| Disclosures not noticed by viewers | Mitigated | Label burned into video; pilot to measure noticed percentage |
+| Word-level clips misrepresent ASL | Accepted limitation | Documented in pilot briefing and all output labels |
+| No Deaf community review | Accepted limitation | Documented; recommended for future sprints |
+| Privacy concern in pilot data | Mitigated | Anonymous collection; no PII retained |
+
+### Sustainability note
+
+The pipeline processes one video at a time using a lightweight sentence-
+transformer model (all-MiniLM-L6-v2, ~22M parameters) on CPU.  FFmpeg
+compositing is a single-pass operation.  Compute usage is minimal for a POC.
+
