@@ -1,0 +1,57 @@
+/* ================================================================
+   ASL Overlay — Styles injected into YouTube pages
+   ================================================================ */
+
+/* ── Overlay container (bottom-right of the YouTube player) ─────── */
+#asl-overlay-root {
+  position: absolute;
+  bottom: 60px;          /* above the YT control bar */
+  right: 12px;
+  width: 220px;
+  height: 180px;
+  z-index: 9999;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.65);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+#asl-overlay-root.asl-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Video element fills the container ──────────────────────────── */
+#asl-overlay-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* ── Small label badge ──────────────────────────────────────────── */
+#asl-overlay-label {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #fff;
+  background: rgba(33, 150, 243, 0.85);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* ── Fullscreen adjustments ─────────────────────────────────────── */
+:fullscreen #asl-overlay-root,
+:-webkit-full-screen #asl-overlay-root {
+  width: 280px;
+  height: 230px;
+  bottom: 80px;
+  right: 20px;
+}
