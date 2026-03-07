@@ -59,3 +59,7 @@ assets/final/*.mp4
 
 # mypy
 .mypy_cache/
+
+# Downloaded word-level clips and chained outputs (large)
+assets/words/
+assets/chained/
