@@ -53,21 +53,19 @@
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 4px 8px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 1px;
+  padding: 5px 8px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
   color: #fff;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.8);
   text-align: center;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  font-family: 'Segoe UI', system-ui, monospace;
-}
-
-#asl-gloss-label.asl-gloss-visible {
-  opacity: 1;
+  display: none;              /* toggled via JS style.display */
+  z-index: 10;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 24px;
 }
 
 /* ── Fullscreen adjustments ─────────────────────────────────────── */

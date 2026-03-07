@@ -8,13 +8,18 @@ const sizeLabel   = document.getElementById("size-label");
 const dot         = document.getElementById("dot");
 const statusText  = document.getElementById("status-text");
 
+// Must match SIZES array in content.js
+const SIZE_LABELS = ["S", "M", "L", "XL"];
+let currentSizeIndex = 1;  // default M
+
 // ── Helper: send message to the content script on the active tab ──
 async function sendToContent(message) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return null;
   return new Promise((resolve) => {
-    chrome.tabs.sendMessage(tab.id, message, (resp) => {
-      resolve(resp || null);
+    chrome.tabs.sendMessage(tab.id, message, () => {
+      if (chrome.runtime.lastError) { resolve(null); return; }
+      resolve(true);
     });
   });
 }
@@ -44,14 +49,22 @@ toggle.addEventListener("change", async () => {
 });
 
 // ── Overlay size buttons ───────────────────────────────────────────
-sizeUp.addEventListener("click", async () => {
-  const resp = await sendToContent({ type: "asl-resize", delta: 1 });
-  if (resp?.sizeLabel) sizeLabel.textContent = resp.sizeLabel;
+function updateSizeLabel() {
+  sizeLabel.textContent = SIZE_LABELS[currentSizeIndex];
+}
+
+sizeUp.addEventListener("click", () => {
+  currentSizeIndex = Math.min(SIZE_LABELS.length - 1, currentSizeIndex + 1);
+  updateSizeLabel();
+  chrome.storage.local.set({ aslSizeIndex: currentSizeIndex });
+  sendToContent({ type: "asl-resize", delta: 1 });
 });
 
-sizeDown.addEventListener("click", async () => {
-  const resp = await sendToContent({ type: "asl-resize", delta: -1 });
-  if (resp?.sizeLabel) sizeLabel.textContent = resp.sizeLabel;
+sizeDown.addEventListener("click", () => {
+  currentSizeIndex = Math.max(0, currentSizeIndex - 1);
+  updateSizeLabel();
+  chrome.storage.local.set({ aslSizeIndex: currentSizeIndex });
+  sendToContent({ type: "asl-resize", delta: -1 });
 });
 
 // ── Gloss text toggle ──────────────────────────────────────────────
@@ -66,10 +79,11 @@ chrome.storage.local.get(["aslEnabled", "aslSizeIndex", "aslShowGloss"], (data) 
   toggle.checked = data.aslEnabled !== false;        // default: on
   glossToggle.checked = data.aslShowGloss === true;  // default: off
 
-  // Size label — ask the content script for the current label
-  sendToContent({ type: "asl-status" }).then((resp) => {
-    if (resp?.sizeLabel) sizeLabel.textContent = resp.sizeLabel;
-  });
+  // Size label — read directly from storage (no content script needed)
+  if (typeof data.aslSizeIndex === "number" && data.aslSizeIndex >= 0 && data.aslSizeIndex < SIZE_LABELS.length) {
+    currentSizeIndex = data.aslSizeIndex;
+  }
+  updateSizeLabel();
 });
 
 checkServer();

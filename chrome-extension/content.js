@@ -81,7 +81,7 @@ function ensureOverlay() {
   // Gloss text overlay
   glossLabel = document.createElement("div");
   glossLabel.id = "asl-gloss-label";
-  glossLabel.classList.toggle("asl-gloss-visible", showGloss);
+  glossLabel.style.display = showGloss ? "block" : "none";
 
   overlayRoot.appendChild(overlayVideo);
   overlayRoot.appendChild(label);
@@ -170,7 +170,7 @@ function updateGlossLabel(glosses) {
 
 function setGlossVisible(visible) {
   showGloss = visible;
-  if (glossLabel) glossLabel.classList.toggle("asl-gloss-visible", visible);
+  if (glossLabel) glossLabel.style.display = visible ? "block" : "none";
 }
 
 // ── Clip queue management ──────────────────────────────────────────
@@ -267,7 +267,31 @@ function stopPolling() {
   }
 }
 
-// ── Listen for popup messages ──────────────────────────────────────
+// ── Listen for popup messages + storage changes ───────────────────
+
+// Storage-based sync: popup writes settings, content script picks them up.
+// This is more reliable than chrome.tabs.sendMessage which can fail.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (changes.aslSizeIndex) {
+    sizeIndex = changes.aslSizeIndex.newValue;
+    applySize();
+  }
+  if (changes.aslShowGloss) {
+    setGlossVisible(changes.aslShowGloss.newValue);
+  }
+  if (changes.aslEnabled) {
+    enabled = changes.aslEnabled.newValue;
+    if (!enabled) {
+      stopPolling();
+      if (overlayRoot) overlayRoot.classList.remove("asl-visible");
+      clipQueue = [];
+      isPlaying = false;
+    } else {
+      startPolling();
+    }
+  }
+});
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === "asl-toggle") {
