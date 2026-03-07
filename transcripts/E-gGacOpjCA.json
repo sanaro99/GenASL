@@ -1,0 +1,42 @@
+[
+ {
+  "text": "Do you have any gum?",
+  "start": 0.0,
+  "duration": 2.0
+ },
+ {
+  "text": "What kind of coffee do you like?",
+  "start": 2.1,
+  "duration": 2.4
+ },
+ {
+  "text": "Nice to meet you.",
+  "start": 4.6,
+  "duration": 2.1
+ },
+ {
+  "text": "Are you ready?",
+  "start": 6.8,
+  "duration": 2.1
+ },
+ {
+  "text": "I don't understand. Please slow down.",
+  "start": 9.0,
+  "duration": 2.6
+ },
+ {
+  "text": "The mitochondria is the powerhouse of the cell.",
+  "start": 11.7,
+  "duration": 3.5
+ },
+ {
+  "text": "Quantum entanglement allows particles to be correlated over vast distances.",
+  "start": 15.3,
+  "duration": 4.0
+ },
+ {
+  "text": "The Krebs cycle produces ATP through oxidative phosphorylation.",
+  "start": 19.4,
+  "duration": 3.8
+ }
+]
