@@ -224,7 +224,14 @@ class GlossTranslator:
         """
         if self._system_as_user:
             messages = [
-                {"role": "user", "content": self._system_prompt + "\n\n" + english_text.strip()},
+                {"role": "user", "content": (
+                    self._system_prompt
+                    + "\n\n---\n"
+                    + "Now translate the following English text to ASL gloss. "
+                    + "Output ONLY the uppercase gloss words, nothing else.\n\n"
+                    + 'English: "' + english_text.strip() + '"\n'
+                    + "ASL Gloss:"
+                )},
             ]
         else:
             messages = [
