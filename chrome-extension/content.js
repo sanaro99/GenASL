@@ -250,6 +250,7 @@ async function fetchTranscriptPlaylist(videoId) {
     if (!resp.ok) {
       console.warn("[ASL] transcript API error", resp.status);
       showLoadingState("ASL: transcript unavailable");
+      transcriptLoaded = true;
       return;
     }
     const data = await resp.json();
@@ -263,6 +264,7 @@ async function fetchTranscriptPlaylist(videoId) {
   } catch (err) {
     console.warn("[ASL] transcript fetch error:", err);
     showLoadingState("ASL: server offline");
+    transcriptLoaded = true;
   } finally {
     transcriptLoading = false;
   }
@@ -280,7 +282,7 @@ function tick() {
 
   // If we haven't fetched the transcript for this video yet, do it now
   const vid = getVideoId();
-  if (vid && vid !== currentVideoId && !transcriptLoading) {
+  if (vid && vid !== currentVideoId && !transcriptLoading && !transcriptLoaded) {
     fetchTranscriptPlaylist(vid);
     return;
   }

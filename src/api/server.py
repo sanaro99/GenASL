@@ -282,7 +282,11 @@ async def translate_transcript(req: TranscriptRequest):
         return TranscriptResponse(entries=_transcript_cache[video_id], cached=True)
 
     loop = asyncio.get_event_loop()
-    entries = await loop.run_in_executor(None, _process_transcript_sync, video_id)
+    try:
+        entries = await loop.run_in_executor(None, _process_transcript_sync, video_id)
+    except Exception as exc:
+        logger.error("Transcript processing failed for %s: %s", video_id, exc)
+        return JSONResponse({"error": f"transcript unavailable: {exc}"}, status_code=404)
     _transcript_cache[video_id] = entries
     return TranscriptResponse(entries=entries, cached=False)
 

@@ -11,7 +11,7 @@ llm:
   provider: "ollama"          # ollama | gemini | openai
 
   ollama:
-    model: "qwen3:4b"
+    model: "gemma3:4b"
     base_url: "http://localhost:11434/v1"
 
   gemini:

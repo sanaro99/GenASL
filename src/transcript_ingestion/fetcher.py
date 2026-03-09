@@ -203,7 +203,7 @@ def _fetch_via_ytdlp(video_id: str) -> list[dict]:
             "--skip-download",
             "--write-auto-sub",
             "--write-sub",
-            "--sub-lang", "en",
+            "--sub-lang", "en,en-US,en-GB,en-AU,en-CA,en-orig",
             "--sub-format", "json3",
             "--output", out_template,
             url,
@@ -328,7 +328,7 @@ def fetch_transcript(video_id: str) -> List[Dict]:
     # --- Primary: YouTube Transcript API ---
     if raw_chunks is None:
         try:
-            fetched = YouTubeTranscriptApi().fetch(video_id, languages=["en"])
+            fetched = YouTubeTranscriptApi().fetch(video_id, languages=["en", "en-US", "en-GB", "en-AU", "en-CA"])
             raw_chunks = [
                 {"text": snippet.text, "start": snippet.start, "duration": snippet.duration}
                 for snippet in fetched
