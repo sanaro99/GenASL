@@ -261,11 +261,15 @@ class GlossTranslator:
         )
         return glosses
 
-    def translate_batch(self, texts: list[str]) -> list[list[str]]:
-        """Translate multiple English sentences in a single LLM call.
+    # Maximum lines per batch chunk — keeps small models focused
+    _BATCH_CHUNK_SIZE = 10
 
-        Sends all lines as a numbered list and parses numbered output.
-        Falls back to sequential ``translate()`` if batch parsing fails.
+    def translate_batch(self, texts: list[str]) -> list[list[str]]:
+        """Translate multiple English sentences via chunked LLM calls.
+
+        Splits input into chunks of ``_BATCH_CHUNK_SIZE``, sends each as a
+        numbered list, and parses the numbered output.  Falls back to
+        sequential ``translate()`` if batch parsing fails for a chunk.
 
         Returns
         -------
@@ -280,13 +284,34 @@ class GlossTranslator:
         if len(texts) <= 2:
             return [self.translate(t) for t in texts]
 
+        all_results: list[list[str]] = [[] for _ in texts]
+
+        for chunk_start in range(0, len(texts), self._BATCH_CHUNK_SIZE):
+            chunk = texts[chunk_start : chunk_start + self._BATCH_CHUNK_SIZE]
+            chunk_results = self._translate_batch_chunk(chunk)
+            for i, glosses in enumerate(chunk_results):
+                all_results[chunk_start + i] = glosses
+
+        return all_results
+
+    def _translate_batch_chunk(self, texts: list[str]) -> list[list[str]]:
+        """Translate a single chunk of ≤ _BATCH_CHUNK_SIZE sentences."""
+        import re
+
         # Build numbered input
         numbered = "\n".join(f"{i+1}. {t.strip()}" for i, t in enumerate(texts))
         user_content = (
-            "Translate each numbered English sentence below to ASL gloss.\n"
-            "Output one line per sentence with the same number. "
-            "Each line should contain ONLY the number, a period, and "
-            "the uppercase ASL gloss words.\n\n"
+            "Translate each numbered English sentence to ASL gloss notation.\n"
+            "Apply ASL grammar: topic-comment order, drop articles/copulas, "
+            "question words at END, time words at START.\n"
+            "Do NOT just uppercase the English — restructure the sentence.\n\n"
+            "Examples:\n"
+            '  English: "Where is the library?" → ASL: LIBRARY WHERE\n'
+            '  English: "What is your name?" → ASL: YOUR NAME WHAT\n'
+            '  English: "I\'m Tim." → ASL: ME NAME T-I-M\n'
+            '  English: "Nice to meet you." → ASL: NICE MEET YOU\n'
+            '  English: "She is very happy today." → ASL: TODAY SHE HAPPY\n\n'
+            "Now translate these. Output ONLY: number, period, ASL gloss words.\n\n"
             + numbered
         )
 
@@ -308,7 +333,7 @@ class GlossTranslator:
                 max_tokens=max(200, len(texts) * 40),
             )
             raw = response.choices[0].message.content.strip()
-            logger.info("Batch translated %d lines", len(texts))
+            logger.info("Batch chunk translated %d lines", len(texts))
 
             # Parse numbered lines: "1. LIBRARY WHERE"
             parsed: dict[int, list[str]] = {}
@@ -329,9 +354,7 @@ class GlossTranslator:
 
             # Check if we got enough
             if len(parsed) >= len(texts) * 0.7:
-                result = []
-                for i in range(len(texts)):
-                    result.append(parsed.get(i, []))
+                result = [parsed.get(i, []) for i in range(len(texts))]
                 logger.info("Batch parse: %d/%d lines parsed", len(parsed), len(texts))
                 return result
             else:
