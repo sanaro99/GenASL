@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Displays real-time ASL sign language overlay on YouTube videos using locally-hosted word clips.",
   "permissions": ["storage", "activeTab"],
-  "host_permissions": ["https://www.youtube.com/*"],
+  "host_permissions": ["https://www.youtube.com/*", "http://127.0.0.1:8794/*"],
   "icons": {
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"

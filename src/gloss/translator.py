@@ -261,6 +261,90 @@ class GlossTranslator:
         )
         return glosses
 
+    def translate_batch(self, texts: list[str]) -> list[list[str]]:
+        """Translate multiple English sentences in a single LLM call.
+
+        Sends all lines as a numbered list and parses numbered output.
+        Falls back to sequential ``translate()`` if batch parsing fails.
+
+        Returns
+        -------
+        list[list[str]]
+            One gloss list per input text, in the same order.
+        """
+        import re
+
+        if not texts:
+            return []
+        # For very small batches, just go sequential
+        if len(texts) <= 2:
+            return [self.translate(t) for t in texts]
+
+        # Build numbered input
+        numbered = "\n".join(f"{i+1}. {t.strip()}" for i, t in enumerate(texts))
+        user_content = (
+            "Translate each numbered English sentence below to ASL gloss.\n"
+            "Output one line per sentence with the same number. "
+            "Each line should contain ONLY the number, a period, and "
+            "the uppercase ASL gloss words.\n\n"
+            + numbered
+        )
+
+        if self._system_as_user:
+            messages = [
+                {"role": "user", "content": self._system_prompt + "\n\n---\n" + user_content},
+            ]
+        else:
+            messages = [
+                {"role": "system", "content": self._system_prompt},
+                {"role": "user", "content": user_content},
+            ]
+
+        try:
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=messages,
+                temperature=0.1,
+                max_tokens=max(200, len(texts) * 40),
+            )
+            raw = response.choices[0].message.content.strip()
+            logger.info("Batch translated %d lines", len(texts))
+
+            # Parse numbered lines: "1. LIBRARY WHERE"
+            parsed: dict[int, list[str]] = {}
+            for line in raw.split("\n"):
+                line = line.strip()
+                m = re.match(r"^(\d+)\.\s*(.+)$", line)
+                if not m:
+                    continue
+                idx = int(m.group(1)) - 1  # 0-based
+                words = [
+                    re.sub(r'[^A-Z0-9\-]', '', w.strip().upper())
+                    for w in m.group(2).split()
+                    if w.strip()
+                ]
+                words = [w for w in words if w]
+                if 0 <= idx < len(texts):
+                    parsed[idx] = words
+
+            # Check if we got enough
+            if len(parsed) >= len(texts) * 0.7:
+                result = []
+                for i in range(len(texts)):
+                    result.append(parsed.get(i, []))
+                logger.info("Batch parse: %d/%d lines parsed", len(parsed), len(texts))
+                return result
+            else:
+                logger.warning(
+                    "Batch parse insufficient (%d/%d) — falling back to sequential",
+                    len(parsed), len(texts),
+                )
+        except Exception as exc:
+            logger.warning("Batch translation failed — falling back to sequential: %s", exc)
+
+        # Fallback: sequential
+        return [self.translate(t) for t in texts]
+
     def translate_segments(self, segments: list[dict]) -> list[dict]:
         """Translate multiple transcript segments to ASL gloss sequences.
 

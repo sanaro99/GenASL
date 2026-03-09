@@ -1,97 +1,64 @@
 /* ================================================================
    ASL Overlay for YouTube — Content Script
    ================================================================
-   Injected on youtube.com.  Watches the YouTube player for caption
-   cue changes and sends each new caption line to the local ASL API
-   server, which returns a clip URL played in an overlay <video>.
+   Injected on youtube.com.  On /watch pages, extracts the video ID,
+   fetches the full transcript + ASL translations from the local API
+   server in one call, then plays ASL clips at the correct timestamps
+   as the YouTube video plays — zero API calls during playback.
    ================================================================ */
 
 "use strict";
 
-const API_BASE = "http://127.0.0.1:8794";   // local FastAPI server
-const POLL_MS  = 250;                        // caption-check interval
-const DEBOUNCE_MS = 600;                     // wait for caption to settle before API call
-const PLAYBACK_MIN = 0.7;                    // minimum playback rate
-const PLAYBACK_MAX = 2.5;                    // maximum playback rate
+const API_BASE     = "http://127.0.0.1:8794";
+const POLL_MS      = 250;       // timestamp-check interval
+const PLAYBACK_MIN = 0.7;
+const PLAYBACK_MAX = 2.5;
 
-// Overlay size presets (index into SIZES)
 const SIZES = [
   { w: 160, h: 130, label: "S"  },
-  { w: 220, h: 180, label: "M"  },   // default
+  { w: 220, h: 180, label: "M"  },
   { w: 320, h: 260, label: "L"  },
   { w: 420, h: 340, label: "XL" },
 ];
 
 // ── State ──────────────────────────────────────────────────────────
-let overlayRoot   = null;   // container div inside the YT player
-let overlayVideo  = null;   // <video> element for ASL clips
-let glossLabel    = null;   // gloss text element
-let lastCaption   = "";     // dedup: skip unchanged captions
-let enabled       = true;   // global on/off (toggled from popup)
-let clipQueue     = [];     // queued clip URLs awaiting playback
-let isPlaying     = false;  // true while overlay video is active
+let overlayRoot   = null;
+let overlayVideo  = null;
+let glossLabel    = null;
+let enabled       = true;
+let clipQueue     = [];
+let isPlaying     = false;
 let pollTimer     = null;
-let sizeIndex     = 1;      // default M
-let showGloss     = false;  // gloss word overlay visibility
-let currentGlosses = [];    // glosses for the current clip
+let sizeIndex     = 1;
+let showGloss     = false;
+let currentGlosses = [];
 let ytVideoListenersAttached = false;
 
-// Timing: track when each caption appeared to measure speech pace
-let lastCaptionTime = 0;    // Date.now() when the last caption changed
-let debounceTimer  = null;  // debounce timer for API calls
-
-// ── Client-side LRU cache (avoids hitting API for repeated captions) ──
-const _clientCache = new Map();  // normalised text → API response data
-const _CLIENT_CACHE_MAX = 200;
-
-function _cacheKey(text) {
-  return text.trim().toLowerCase();
-}
-
-function _clientCacheGet(text) {
-  const k = _cacheKey(text);
-  if (_clientCache.has(k)) {
-    // Move to end (most recently used)
-    const val = _clientCache.get(k);
-    _clientCache.delete(k);
-    _clientCache.set(k, val);
-    return val;
-  }
-  return null;
-}
-
-function _clientCacheSet(text, data) {
-  const k = _cacheKey(text);
-  if (_clientCache.size >= _CLIENT_CACHE_MAX) {
-    // Delete oldest entry
-    const first = _clientCache.keys().next().value;
-    _clientCache.delete(first);
-  }
-  _clientCache.set(k, data);
-}
-
-// ── In-flight dedup: don't send the same request twice concurrently ──
-const _inflightRequests = new Set();
+// Transcript playlist state
+let aslPlaylist       = [];    // sorted array of { start_ms, end_ms, clip_url, glosses, clip_duration_ms }
+let lastTriggeredIdx  = -1;    // index of the last entry we started playing
+let currentVideoId    = null;  // YouTube video ID currently loaded
+let transcriptLoading = false; // true while /asl/transcript is in-flight
+let transcriptLoaded  = false; // true once playlist is ready
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-/** Find the YouTube <video> element. */
 function getYTVideo() {
   return document.querySelector("video.html5-main-video") ||
          document.querySelector("#movie_player video");
 }
 
-/** Find the YT player container (for overlay positioning). */
 function getPlayerContainer() {
   return document.querySelector("#movie_player") ||
          document.querySelector(".html5-video-player");
 }
 
-/** Read the currently-visible caption text from the DOM. */
-function getCurrentCaption() {
-  const segments = document.querySelectorAll(".ytp-caption-segment");
-  if (segments.length === 0) return "";
-  return Array.from(segments).map(s => s.textContent.trim()).join(" ");
+/** Extract the 11-char video ID from the current YouTube URL. */
+function getVideoId() {
+  const params = new URLSearchParams(location.search);
+  const v = params.get("v");
+  if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
+  return null;
 }
 
 // ── Overlay creation ───────────────────────────────────────────────
@@ -107,7 +74,7 @@ function ensureOverlay() {
 
   overlayVideo = document.createElement("video");
   overlayVideo.id = "asl-overlay-video";
-  overlayVideo.muted = true;            // autoplay requires muted first
+  overlayVideo.muted = true;
   overlayVideo.playsInline = true;
   overlayVideo.preload = "auto";
 
@@ -115,12 +82,10 @@ function ensureOverlay() {
   label.id = "asl-overlay-label";
   label.textContent = "ASL";
 
-  // Gloss text overlay
   glossLabel = document.createElement("div");
   glossLabel.id = "asl-gloss-label";
   glossLabel.style.display = showGloss ? "block" : "none";
 
-  // Gloss label must be ABOVE the video — use a wrapper with z-index
   const videoWrap = document.createElement("div");
   videoWrap.id = "asl-overlay-video-wrap";
   videoWrap.appendChild(overlayVideo);
@@ -130,25 +95,19 @@ function ensureOverlay() {
   overlayRoot.appendChild(glossLabel);
   player.appendChild(overlayRoot);
 
-  console.log("[ASL] overlay created, showGloss:", showGloss, "sizeIndex:", sizeIndex);
-
-  // Apply saved size
   applySize();
 
-  // When a clip finishes, play the next queued clip (or hide).
-  overlayVideo.addEventListener("ended", () => {
-    playNextClip();
-  });
+  overlayVideo.addEventListener("ended", () => playNextClip());
   overlayVideo.addEventListener("error", () => {
     console.warn("[ASL] overlay video error", overlayVideo.error);
     playNextClip();
   });
 
-  // Attach YT video listeners for pause/play/seek sync
   attachYTListeners();
+  console.log("[ASL] overlay created");
 }
 
-// ── YouTube video event listeners (pause/play/seek sync) ──────────
+// ── YouTube video event listeners ─────────────────────────────────
 
 function attachYTListeners() {
   if (ytVideoListenersAttached) return;
@@ -156,7 +115,6 @@ function attachYTListeners() {
   if (!ytVid) return;
   ytVideoListenersAttached = true;
 
-  // Pause ASL overlay when YouTube pauses
   ytVid.addEventListener("pause", () => {
     if (overlayVideo && isPlaying) {
       overlayVideo.pause();
@@ -164,7 +122,6 @@ function attachYTListeners() {
     }
   });
 
-  // Resume ASL overlay when YouTube plays
   ytVid.addEventListener("play", () => {
     if (overlayVideo && isPlaying && overlayVideo.paused) {
       overlayVideo.play().catch(() => {});
@@ -172,13 +129,10 @@ function attachYTListeners() {
     }
   });
 
-  // On seek: clear queue and reset overlay (captions will re-trigger)
   ytVid.addEventListener("seeked", () => {
-    console.log("[ASL] YT seeked — clearing clip queue");
+    console.log("[ASL] YT seeked — resetting playlist position");
     clipQueue = [];
-    lastCaption = "";       // allow re-processing of the caption at new position
-    lastCaptionTime = 0;    // reset adaptive speed baseline
-    if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+    lastTriggeredIdx = -1;
     if (overlayVideo && isPlaying) {
       overlayVideo.pause();
       overlayVideo.removeAttribute("src");
@@ -189,30 +143,27 @@ function attachYTListeners() {
   });
 }
 
-// ── Overlay size control ───────────────────────────────────────────
+// ── Overlay size ──────────────────────────────────────────────────
 
 function applySize() {
   if (!overlayRoot) return;
   const s = SIZES[sizeIndex];
   overlayRoot.style.setProperty("width",  s.w + "px", "important");
   overlayRoot.style.setProperty("height", s.h + "px", "important");
-  console.log("[ASL] applySize:", s.label, s.w + "x" + s.h);
 }
 
 function changeSize(delta) {
   sizeIndex = Math.max(0, Math.min(SIZES.length - 1, sizeIndex + delta));
   applySize();
   chrome.storage.local.set({ aslSizeIndex: sizeIndex });
-  console.log("[ASL] overlay size:", SIZES[sizeIndex].label);
 }
 
-// ── Gloss label ────────────────────────────────────────────────────
+// ── Gloss label ───────────────────────────────────────────────────
 
 function updateGlossLabel(glosses) {
   currentGlosses = glosses;
   if (glossLabel) {
     glossLabel.textContent = glosses.length ? glosses.join("  ") : "";
-    console.log("[ASL] gloss:", glossLabel.textContent, "visible:", showGloss);
   }
 }
 
@@ -221,10 +172,26 @@ function setGlossVisible(visible) {
   if (glossLabel) glossLabel.style.display = visible ? "block" : "none";
 }
 
-// ── Clip queue management ──────────────────────────────────────────
+// ── Loading state label ───────────────────────────────────────────
 
-function enqueueClip(url, glosses, clipDurationMs) {
-  clipQueue.push({ url, glosses, clipDurationMs: clipDurationMs || 0 });
+function showLoadingState(msg) {
+  if (glossLabel) {
+    glossLabel.textContent = msg;
+    glossLabel.style.display = "block";
+  }
+}
+
+function hideLoadingState() {
+  if (glossLabel) {
+    glossLabel.style.display = showGloss ? "block" : "none";
+    glossLabel.textContent = "";
+  }
+}
+
+// ── Clip queue management ─────────────────────────────────────────
+
+function enqueueClip(url, glosses, clipDurationMs, availableMs) {
+  clipQueue.push({ url, glosses, clipDurationMs: clipDurationMs || 0, availableMs: availableMs || 0 });
   if (!isPlaying) playNextClip();
 }
 
@@ -236,12 +203,8 @@ function playNextClip() {
     return;
   }
 
-  // Respect YT pause state — don't start a new clip if YT is paused
   const ytVid = getYTVideo();
-  if (ytVid && ytVid.paused) {
-    // Don't dequeue — wait. A "play" event will resume.
-    return;
-  }
+  if (ytVid && ytVid.paused) return;
 
   isPlaying = true;
   const item = clipQueue.shift();
@@ -249,22 +212,13 @@ function playNextClip() {
   overlayRoot.classList.add("asl-visible");
   updateGlossLabel(item.glosses || []);
 
-  // ── Adaptive playback speed ──────────────────────────────────
-  // Compute how fast to play this clip so it finishes roughly in
-  // time for the next caption.  Uses the time gap between the
-  // previous caption arrival and this one as "available time".
-  if (item.clipDurationMs > 0 && lastCaptionTime > 0) {
-    const now = Date.now();
-    const availableMs = now - lastCaptionTime;
-    if (availableMs > 0) {
-      const idealRate = item.clipDurationMs / availableMs;
-      const rate = Math.min(PLAYBACK_MAX, Math.max(PLAYBACK_MIN, idealRate));
-      overlayVideo.playbackRate = rate;
-      console.log("[ASL] adaptive rate:", rate.toFixed(2),
-        `(clip ${item.clipDurationMs}ms / avail ${availableMs}ms)`);
-    } else {
-      overlayVideo.playbackRate = 1.0;
-    }
+  // Adaptive playback speed: fit clip into the available time window
+  if (item.clipDurationMs > 0 && item.availableMs > 0) {
+    const idealRate = item.clipDurationMs / item.availableMs;
+    const rate = Math.min(PLAYBACK_MAX, Math.max(PLAYBACK_MIN, idealRate));
+    overlayVideo.playbackRate = rate;
+    console.log("[ASL] rate:", rate.toFixed(2),
+      `(clip ${item.clipDurationMs}ms / window ${item.availableMs}ms)`);
   } else {
     overlayVideo.playbackRate = 1.0;
   }
@@ -275,54 +229,46 @@ function playNextClip() {
   });
 }
 
-// ── Caption → ASL pipeline (with debounce + cache) ─────────────────
+// ── Transcript fetching ───────────────────────────────────────────
 
-async function processCaption(text) {
-  if (!text) return;
+async function fetchTranscriptPlaylist(videoId) {
+  if (transcriptLoading) return;
+  transcriptLoading = true;
+  transcriptLoaded = false;
+  aslPlaylist = [];
+  lastTriggeredIdx = -1;
 
-  // ── Client-side cache hit: skip network entirely ──
-  const cached = _clientCacheGet(text);
-  if (cached) {
-    console.log("[ASL] client cache hit");
-    if (cached.clip_url) {
-      enqueueClip(cached.clip_url, cached.glosses || [], cached.clip_duration_ms || 0);
-    }
-    return;
-  }
+  ensureOverlay();
+  showLoadingState("Loading ASL transcript…");
 
-  // ── In-flight dedup: don't send the same caption twice ──
-  const key = _cacheKey(text);
-  if (_inflightRequests.has(key)) {
-    console.log("[ASL] request already in-flight, skipping");
-    return;
-  }
-
-  _inflightRequests.add(key);
   try {
-    const resp = await fetch(`${API_BASE}/asl`, {
+    const resp = await fetch(`${API_BASE}/asl/transcript`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ video_id: videoId }),
     });
     if (!resp.ok) {
-      console.warn("[ASL] API error", resp.status);
+      console.warn("[ASL] transcript API error", resp.status);
+      showLoadingState("ASL: transcript unavailable");
       return;
     }
     const data = await resp.json();
-    // Cache the response for future use
-    _clientCacheSet(text, data);
-    if (data.clip_url) {
-      enqueueClip(data.clip_url, data.glosses || [], data.clip_duration_ms || 0);
-    }
+    aslPlaylist = (data.entries || []).filter(e => e.clip_url);
+    aslPlaylist.sort((a, b) => a.start_ms - b.start_ms);
+    transcriptLoaded = true;
+    currentVideoId = videoId;
+    hideLoadingState();
+    console.log("[ASL] playlist loaded:", aslPlaylist.length, "entries",
+      data.cached ? "(cached)" : "(fresh)");
   } catch (err) {
-    // Server down — silently ignore so we don't spam console
-    if (err.name !== "TypeError") console.warn("[ASL] fetch error:", err);
+    console.warn("[ASL] transcript fetch error:", err);
+    showLoadingState("ASL: server offline");
   } finally {
-    _inflightRequests.delete(key);
+    transcriptLoading = false;
   }
 }
 
-// ── Main poll loop (with debounce) ─────────────────────────────────
+// ── Timestamp-tracking tick loop ──────────────────────────────────
 
 function tick() {
   if (!enabled) return;
@@ -332,30 +278,38 @@ function tick() {
 
   ensureOverlay();
 
-  // Don't process while paused — queue will wait for YT resume
-  if (ytVid.paused) return;
+  // If we haven't fetched the transcript for this video yet, do it now
+  const vid = getVideoId();
+  if (vid && vid !== currentVideoId && !transcriptLoading) {
+    fetchTranscriptPlaylist(vid);
+    return;
+  }
 
-  const caption = getCurrentCaption();
-  if (!caption || caption === lastCaption) return;
+  if (!transcriptLoaded || ytVid.paused) return;
 
-  // Caption changed — record the time for adaptive playback speed
-  lastCaptionTime = Date.now();
-  lastCaption = caption;
+  const currentMs = ytVid.currentTime * 1000;
 
-  // Debounce: wait DEBOUNCE_MS for the caption to settle before
-  // firing an API call.  If the caption changes again within the
-  // window, we restart the timer (only the final text gets sent).
-  if (debounceTimer) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    debounceTimer = null;
-    processCaption(caption);
-  }, DEBOUNCE_MS);
+  // Find the playlist entry for the current timestamp
+  // Binary-search friendly since playlist is sorted by start_ms
+  for (let i = 0; i < aslPlaylist.length; i++) {
+    const entry = aslPlaylist[i];
+    if (currentMs >= entry.start_ms && currentMs < entry.end_ms) {
+      if (i !== lastTriggeredIdx) {
+        lastTriggeredIdx = i;
+        const availableMs = entry.end_ms - entry.start_ms;
+        enqueueClip(entry.clip_url, entry.glosses || [], entry.clip_duration_ms || 0, availableMs);
+        console.log("[ASL] triggered entry", i, "@", Math.round(currentMs) + "ms:",
+          (entry.glosses || []).join(" "));
+      }
+      break;
+    }
+  }
 }
 
 function startPolling() {
   if (pollTimer) return;
   pollTimer = setInterval(tick, POLL_MS);
-  console.log("[ASL] caption polling started");
+  console.log("[ASL] timestamp polling started");
 }
 
 function stopPolling() {
@@ -367,8 +321,6 @@ function stopPolling() {
 
 // ── Listen for popup messages + storage changes ───────────────────
 
-// Storage-based sync: popup writes settings, content script picks them up.
-// This is more reliable than chrome.tabs.sendMessage which can fail.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (changes.aslSizeIndex) {
@@ -382,8 +334,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
     enabled = changes.aslEnabled.newValue;
     if (!enabled) {
       stopPolling();
-      if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
-      lastCaptionTime = 0;
       if (overlayRoot) overlayRoot.classList.remove("asl-visible");
       clipQueue = [];
       isPlaying = false;
@@ -398,8 +348,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     enabled = msg.enabled;
     if (!enabled) {
       stopPolling();
-      if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
-      lastCaptionTime = 0;
       if (overlayRoot) overlayRoot.classList.remove("asl-visible");
       clipQueue = [];
       isPlaying = false;
@@ -409,10 +357,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse({ enabled });
   }
   if (msg.type === "asl-status") {
-    sendResponse({ enabled, lastCaption, sizeLabel: SIZES[sizeIndex].label, showGloss });
+    sendResponse({
+      enabled,
+      sizeLabel: SIZES[sizeIndex].label,
+      showGloss,
+      playlistSize: aslPlaylist.length,
+      transcriptLoaded,
+    });
   }
   if (msg.type === "asl-resize") {
-    changeSize(msg.delta);   // +1 = bigger, -1 = smaller
+    changeSize(msg.delta);
     sendResponse({ sizeLabel: SIZES[sizeIndex].label });
   }
   if (msg.type === "asl-gloss-toggle") {
@@ -422,16 +376,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
-// ── SPA navigation handling (YouTube is a SPA) ────────────────────
+// ── SPA navigation handling ───────────────────────────────────────
 
 function onNavigate() {
-  lastCaption = "";
-  lastCaptionTime = 0;
   clipQueue = [];
   isPlaying = false;
-  ytVideoListenersAttached = false;   // new video element after navigation
-  if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
-  // Re-check for the player after YouTube's SPA navigation
+  lastTriggeredIdx = -1;
+  aslPlaylist = [];
+  transcriptLoaded = false;
+  transcriptLoading = false;
+  currentVideoId = null;
+  ytVideoListenersAttached = false;
+
   setTimeout(() => {
     if (location.pathname === "/watch") {
       ensureOverlay();
@@ -442,16 +398,15 @@ function onNavigate() {
   }, 1500);
 }
 
-// YouTube fires yt-navigate-finish on SPA transitions
 window.addEventListener("yt-navigate-finish", onNavigate);
 
-// ── Init: restore saved preferences ───────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────
+
 chrome.storage.local.get(["aslSizeIndex", "aslShowGloss"], (data) => {
   if (typeof data.aslSizeIndex === "number") sizeIndex = data.aslSizeIndex;
   if (typeof data.aslShowGloss === "boolean") showGloss = data.aslShowGloss;
 });
 
-// Initial start
 if (location.pathname === "/watch") {
   startPolling();
 }

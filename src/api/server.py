@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -25,6 +26,7 @@ from pydantic import BaseModel
 from src.gloss.translator import GlossTranslator
 from src.gloss.word_lookup import WordLookup
 from src.gloss.chainer import chain_clips
+from src.transcript_ingestion.fetcher import fetch_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -111,10 +113,35 @@ class AslResponse(BaseModel):
     cached: bool = False
 
 
+class TranscriptRequest(BaseModel):
+    video_id: str
+
+
+class TranscriptEntry(BaseModel):
+    start_ms: int
+    end_ms: int
+    text: str
+    glosses: list[str]
+    found: list[str]
+    missing: list[str]
+    clip_url: str | None = None
+    clip_duration_ms: int = 0
+
+
+class TranscriptResponse(BaseModel):
+    entries: list[TranscriptEntry]
+    cached: bool = False
+
+
 # ── In-memory cache for recent translations ────────────────────────
 # Key: normalised caption text → value: AslResponse dict
 _response_cache: dict[str, dict] = {}
 _MAX_CACHE = 500
+
+# Video-level transcript cache (keyed by video_id)
+_transcript_cache: dict[str, list[dict]] = {}
+
+_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
 def _cache_key(text: str) -> str:
@@ -187,6 +214,77 @@ async def translate_caption(req: CaptionRequest):
     loop = asyncio.get_event_loop()
     resp = await loop.run_in_executor(None, _translate_sync, text, ck)
     return AslResponse(**resp)
+
+
+# ── Full-transcript pipeline ───────────────────────────────────────
+
+def _process_transcript_sync(video_id: str) -> list[dict]:
+    """Fetch transcript, batch-translate, lookup, chain — all blocking."""
+    segments = fetch_transcript(video_id)
+    if not segments:
+        return []
+
+    translator = _get_translator()
+    lookup = _get_lookup()
+
+    # Batch translate all lines at once (1 LLM call)
+    texts = [seg["text"] for seg in segments]
+    all_glosses = translator.translate_batch(texts)
+
+    entries = []
+    for seg, glosses in zip(segments, all_glosses):
+        found_list = []
+        missing_list = []
+        clip_url = None
+        clip_duration_ms = 0
+
+        if glosses:
+            word_entries = lookup.lookup_sequence(glosses)
+            found_list = [e["gloss"] for e in word_entries if e["found"]]
+            missing_list = [e["gloss"] for e in word_entries if not e["found"]]
+
+            if found_list:
+                ck = hashlib.md5(seg["text"].strip().lower().encode()).hexdigest()
+                clip_name = f"ext_{ck}"
+                result = chain_clips(word_entries, clip_name)
+                if result and Path(result["path"]).is_file():
+                    clip_url = f"http://127.0.0.1:8794/clips/{clip_name}.mp4"
+                    clip_duration_ms = result.get("duration_ms", 0)
+
+        entries.append({
+            "start_ms": seg["start_ms"],
+            "end_ms": seg["end_ms"],
+            "text": seg["text"],
+            "glosses": glosses,
+            "found": found_list,
+            "missing": missing_list,
+            "clip_url": clip_url,
+            "clip_duration_ms": clip_duration_ms,
+        })
+
+    logger.info(
+        "Transcript processed: %d segments, %d with clips",
+        len(entries), sum(1 for e in entries if e["clip_url"]),
+    )
+    return entries
+
+
+@app.post("/asl/transcript", response_model=TranscriptResponse)
+async def translate_transcript(req: TranscriptRequest):
+    """Fetch, translate, and chain an entire YouTube video transcript."""
+    video_id = req.video_id.strip()
+    if not _VIDEO_ID_RE.match(video_id):
+        return JSONResponse({"error": "invalid video_id"}, status_code=400)
+
+    # Check video-level cache
+    if video_id in _transcript_cache:
+        logger.info("Transcript cache hit for %s", video_id)
+        return TranscriptResponse(entries=_transcript_cache[video_id], cached=True)
+
+    loop = asyncio.get_event_loop()
+    entries = await loop.run_in_executor(None, _process_transcript_sync, video_id)
+    _transcript_cache[video_id] = entries
+    return TranscriptResponse(entries=entries, cached=False)
 
 
 @app.get("/clips/{filename}")
