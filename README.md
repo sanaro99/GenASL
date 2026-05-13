@@ -20,8 +20,7 @@ flowchart LR
 
 ## Demo & Resources
 
-- **Demo Video**: 
-<video src="assets/demo/asl-gen-recording.mp4" controls autoplay loop muted playsinline width="100%"></video>
+- **Demo Video**: [Watch Demo (`assets/demo/asl-gen-recording.mp4`)](assets/demo/asl-gen-recording.mp4)
 - **Extension Screenshot**: ![Extension Image](assets/demo/genasl_extension.png)
 - **Overlay Screenshot**: ![Overlay Image](assets/demo/genasl_overlay.png)
 - **Presentation**: [GenASL Presentation (PDF)](assets/demo/GenASL_Presentation.pdf)
