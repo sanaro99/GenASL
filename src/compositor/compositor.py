@@ -9,54 +9,22 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import shutil
 import subprocess
 from pathlib import Path
 from typing import List
 
+from src.core.config import get_settings
+from src.core.ffmpeg import find_ffmpeg, find_ffprobe
+from src.core.paths import LOGS_DIR, PROJECT_ROOT
+
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-# Disclosure label text — must be visible at all times (RAI requirement)
-_DISCLOSURE_LABEL = "AI-generated ASL overlay (POC)"
-
-
-def _find_ffmpeg() -> str:
-    """Locate the ffmpeg binary."""
-    # Check common winget install path
-    winget_path = Path(os.environ.get("LOCALAPPDATA", "")) / (
-        r"Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe"
-        r"\ffmpeg-8.0.1-full_build\bin\ffmpeg.exe"
-    )
-    if winget_path.is_file():
-        return str(winget_path)
-    system_path = shutil.which("ffmpeg")
-    if system_path:
-        return system_path
-    raise FileNotFoundError(
-        "ffmpeg not found. Install via 'winget install Gyan.FFmpeg' or add to PATH."
-    )
-
-
-def _find_ffprobe() -> str:
-    """Locate the ffprobe binary."""
-    winget_path = Path(os.environ.get("LOCALAPPDATA", "")) / (
-        r"Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe"
-        r"\ffmpeg-8.0.1-full_build\bin\ffprobe.exe"
-    )
-    if winget_path.is_file():
-        return str(winget_path)
-    system_path = shutil.which("ffprobe")
-    if system_path:
-        return system_path
-    raise FileNotFoundError("ffprobe not found.")
+_PROJECT_ROOT = PROJECT_ROOT
 
 
 def get_video_dimensions(video_path: Path) -> tuple[int, int]:
     """Return (width, height) of the video at *video_path*."""
-    ffprobe = _find_ffprobe()
+    ffprobe = find_ffprobe()
     cmd = [
         ffprobe, "-v", "error",
         "-select_streams", "v:0",
@@ -94,10 +62,11 @@ def compose_pip(
     Path
         The path to the output video file.
     """
-    ffmpeg = _find_ffmpeg()
+    ffmpeg = find_ffmpeg()
+    settings = get_settings()
 
     if output_path is None:
-        output_path = _PROJECT_ROOT / "logs" / f"{plan['run_id']}_composited.mp4"
+        output_path = LOGS_DIR / f"{plan['run_id']}_composited.mp4"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Gather ASL overlay entries that are kept (not dropped by overlap resolution)
@@ -124,7 +93,7 @@ def compose_pip(
 
     # Get source dimensions for PiP sizing
     src_w, src_h = get_video_dimensions(source_video)
-    pip_w = int(src_w * 0.25)
+    pip_w = int(src_w * settings.compositor.pip_width_ratio)
 
     # Build FFmpeg filter_complex
     #
@@ -165,7 +134,7 @@ def compose_pip(
         prev_label = out_label
 
     # Disclosure label — always visible (RAI requirement)
-    label_escaped = _DISCLOSURE_LABEL.replace("'", "'\\''").replace(":", "\\:")
+    label_escaped = settings.compositor.disclosure_label.replace("'", "'\\''").replace(":", "\\:")
     filter_parts.append(
         f"{prev_label}drawtext="
         f"text='{label_escaped}':"

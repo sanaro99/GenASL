@@ -1,4 +1,7 @@
 # GenASL Pipeline Configuration
+#
+# All defaults live in src/core/config.py (Pydantic Settings). This file
+# overrides only what differs from the defaults for this checkout.
 
 # --- LLM provider for English-to-ASL gloss translation ---
 # Supported providers: ollama (local, free), gemini (free tier), openai
@@ -23,27 +26,6 @@ llm:
     model: "gpt-4o-mini"
     # key via env: OPENAI_API_KEY
 
-matcher:
-  model_name: "all-MiniLM-L6-v2"
-
-  # confidence_threshold — minimum cosine-similarity score for a transcript
-  # segment to be matched to a Supported Set ASL clip.  Segments scoring
-  # below this value fall back to burned-in captions (action: CAPTIONS).
-  #
-  # RAI rationale: This is the primary allowlist gate.  Lowering the
-  # threshold lets borderline, potentially incorrect matches through
-  # (see Sprint 2 retro Issue 1: SEG_002 matched at 0.72 with a
-  # 16-second intro monologue).  Any change to this value must be
-  # reviewed and documented in docs/governance_notes.md.
-  #
-  # History:
-  #   Sprint 1  — 0.80 (original design)
-  #   Sprint 2  — 0.70 (undocumented change, reverted in Sprint 3)
-  #   Sprint 3  — 0.80 (restored)
-  confidence_threshold: 0.80
-
-  top_k: 1
-
 build:
   # Signer preference chain — try signer 9 first (91% keyword coverage,
   # consistent framing from asl5200), then 109, then 12, then any.
@@ -59,10 +41,3 @@ test_videos:
     title: "Easy English Conversations Episode 3"
   - id: "bq6GBbh3uhU"
     title: "Easy English Conversations Episode 4"
-
-paths:
-  supported_set: "data/supported_set_v1.csv"
-  faiss_index: "data/faiss_index.bin"
-  index_metadata: "data/index_metadata.json"
-  asset_manifest: "assets/asset_manifest_v1.json"
-  logs: "logs/"

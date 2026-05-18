@@ -12,31 +12,18 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 
+from src.core.ffmpeg import find_ffmpeg
+from src.core.paths import CHAINED_CLIPS_DIR, PROJECT_ROOT
+
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_CHAINED_DIR = _PROJECT_ROOT / "assets" / "chained"
-
-
-def _find_ffmpeg() -> str:
-    """Locate the ffmpeg binary."""
-    winget_path = Path(os.environ.get("LOCALAPPDATA", "")) / (
-        r"Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe"
-        r"\ffmpeg-8.0.1-full_build\bin\ffmpeg.exe"
-    )
-    if winget_path.is_file():
-        return str(winget_path)
-    system_path = shutil.which("ffmpeg")
-    if system_path:
-        return system_path
-    raise FileNotFoundError(
-        "ffmpeg not found. Install via 'winget install Gyan.FFmpeg' or add to PATH."
-    )
+_PROJECT_ROOT = PROJECT_ROOT
+_CHAINED_DIR = CHAINED_CLIPS_DIR
 
 
 def chain_clips(
@@ -89,7 +76,7 @@ def chain_clips(
         }
 
     # Multiple clips — use FFmpeg concat demuxer
-    ffmpeg = _find_ffmpeg()
+    ffmpeg = find_ffmpeg()
 
     # Write concat list to a temp file
     fd, concat_file = tempfile.mkstemp(suffix=".txt", prefix="concat_")
