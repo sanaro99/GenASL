@@ -23,12 +23,30 @@ from pydantic import BaseModel, Field
 # Leaf shapes
 # ---------------------------------------------------------------------------
 
+def ms_to_timecode(ms: int) -> str:
+    """Format milliseconds as ``HH:MM:SS.mmm``."""
+    total_s, millis = divmod(ms, 1000)
+    mins, secs = divmod(total_s, 60)
+    hrs, mins = divmod(mins, 60)
+    return f"{hrs:02d}:{mins:02d}:{secs:02d}.{millis:03d}"
+
+
 class Timing(BaseModel):
     start_ms: int
     end_ms: int
     duration_ms: int
     start_tc: str
     end_tc: str
+
+    @classmethod
+    def from_ms(cls, start_ms: int, end_ms: int) -> "Timing":
+        return cls(
+            start_ms=start_ms,
+            end_ms=end_ms,
+            duration_ms=end_ms - start_ms,
+            start_tc=ms_to_timecode(start_ms),
+            end_tc=ms_to_timecode(end_ms),
+        )
 
 
 class WordClip(BaseModel):
@@ -204,6 +222,8 @@ class PlanInput(BaseModel):
 
 
 __all__ = [
+    # helpers
+    "ms_to_timecode",
     # leaves
     "Timing", "WordClip", "ChainedClip",
     # segment lineage
