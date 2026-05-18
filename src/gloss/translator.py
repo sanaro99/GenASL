@@ -180,6 +180,7 @@ class GlossTranslator:
         # Gemma models served via the Gemini API don't support the
         # "system" role (developer instructions).  We fold the system
         # prompt into the first user message instead.
+        # Native Gemini models (and OpenAI, Ollama) support system prompts.
         self._system_as_user = model.startswith("gemma")
 
         # Use compact prompt for local models (saves ~4000 tokens of prompt
@@ -261,7 +262,7 @@ class GlossTranslator:
         )
         return glosses
 
-    # Maximum lines per batch chunk — keeps small models focused
+    # Maximum lines per batch chunk
     _BATCH_CHUNK_SIZE = 10
 
     def translate_batch(self, texts: list[str]) -> list[list[str]]:

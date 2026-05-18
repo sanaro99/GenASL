@@ -11,11 +11,11 @@ llm:
   provider: "ollama"          # ollama | gemini | openai
 
   ollama:
-    model: "gemma3:4b"
+    model: "llama3.2"
     base_url: "http://localhost:11434/v1"
 
   gemini:
-    model: "gemma-3-27b-it"
+    model: "gemini-2.0-flash"
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     # key via env: GEMINI_API_KEY
 
