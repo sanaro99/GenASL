@@ -23,42 +23,32 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # ---------------------------------------------------------------------------
 
 class TestGlossTranslator:
-    """Tests for src.gloss.translator.GlossTranslator."""
+    """Tests for src.gloss.translator.GlossTranslator (with FakeProvider)."""
 
-    @patch("src.gloss.translator.GlossTranslator.__init__", return_value=None)
-    def test_translate_parses_response(self, mock_init):
-        """translate() splits LLM response into uppercase gloss list."""
+    def test_translate_parses_response(self):
+        """translate() splits the provider response into a uppercase gloss list."""
+        from src.gloss.providers.fake import FakeProvider
         from src.gloss.translator import GlossTranslator
 
-        translator = GlossTranslator.__new__(GlossTranslator)
-        # Set up mock client
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "LIBRARY WHERE"
-        translator._client = MagicMock()
-        translator._client.chat.completions.create.return_value = mock_response
-        translator._model = "gpt-4o-mini"
-        translator._system_prompt = "test prompt"
-        translator._system_as_user = False
-
+        translator = GlossTranslator(provider=FakeProvider(canned="LIBRARY WHERE"))
         result = translator.translate("Where is the library?")
         assert result == ["LIBRARY", "WHERE"]
 
-    @patch("src.gloss.translator.GlossTranslator.__init__", return_value=None)
-    def test_translate_segments_enriches_all(self, mock_init):
-        """translate_segments() adds gloss_sequence and gloss_text to each segment."""
+    def test_translate_strips_punctuation(self):
+        """translate() drops non-alphanumeric chars from each gloss token."""
+        from src.gloss.providers.fake import FakeProvider
         from src.gloss.translator import GlossTranslator
 
-        translator = GlossTranslator.__new__(GlossTranslator)
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "HAPPY TODAY"
-        translator._client = MagicMock()
-        translator._client.chat.completions.create.return_value = mock_response
-        translator._model = "gpt-4o-mini"
-        translator._system_prompt = "test"
-        translator._system_as_user = False
+        translator = GlossTranslator(provider=FakeProvider(canned="HELLO, HOW ARE YOU?"))
+        result = translator.translate("Hello, how are you?")
+        assert result == ["HELLO", "HOW", "ARE", "YOU"]
 
+    def test_translate_segments_enriches_all(self):
+        """translate_segments() adds gloss_sequence and gloss_text to each segment."""
+        from src.gloss.providers.fake import FakeProvider
+        from src.gloss.translator import GlossTranslator
+
+        translator = GlossTranslator(provider=FakeProvider(canned="HAPPY TODAY"))
         segments = [
             {"segment_id": "SEG_001", "text": "She is very happy today."},
         ]
@@ -67,22 +57,32 @@ class TestGlossTranslator:
         assert result[0]["gloss_sequence"] == ["HAPPY", "TODAY"]
         assert result[0]["gloss_text"] == "HAPPY TODAY"
 
-    @patch("src.gloss.translator.GlossTranslator.__init__", return_value=None)
-    def test_translate_handles_api_error_gracefully(self, mock_init):
-        """translate_segments() returns empty gloss on API error."""
+    def test_translate_handles_api_error_gracefully(self):
+        """translate_segments() returns empty gloss on provider error."""
+        from src.gloss.providers.fake import FakeProvider
         from src.gloss.translator import GlossTranslator
 
-        translator = GlossTranslator.__new__(GlossTranslator)
-        translator._client = MagicMock()
-        translator._client.chat.completions.create.side_effect = RuntimeError("API down")
-        translator._model = "gpt-4o-mini"
-        translator._system_prompt = "test"
-        translator._system_as_user = False
-
+        translator = GlossTranslator(
+            provider=FakeProvider(raises=RuntimeError("API down"))
+        )
         segments = [{"segment_id": "SEG_001", "text": "Hello world."}]
         result = translator.translate_segments(segments)
         assert result[0]["gloss_sequence"] == []
         assert result[0]["gloss_text"] == ""
+
+    def test_translate_batch_uses_numbered_output(self):
+        """translate_batch() parses numbered chunks from the provider response."""
+        from src.gloss.providers.fake import FakeProvider
+        from src.gloss.translator import GlossTranslator
+
+        canned = "1. LIBRARY WHERE\n2. TODAY HAPPY\n3. STORE GO"
+        translator = GlossTranslator(provider=FakeProvider(canned=canned))
+        out = translator.translate_batch([
+            "Where is the library?",
+            "She is very happy today.",
+            "I want to go to the store.",
+        ])
+        assert out == [["LIBRARY", "WHERE"], ["TODAY", "HAPPY"], ["STORE", "GO"]]
 
 
 # ---------------------------------------------------------------------------

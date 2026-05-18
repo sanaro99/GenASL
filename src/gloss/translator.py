@@ -1,13 +1,8 @@
 """LLM-based English-to-ASL gloss translator.
 
 Translates English sentences into ASL gloss sequences using a chat LLM.
-Supports three providers (configured in ``config.yaml`` under ``llm``):
-
-* **ollama** — local, free, no API key (default)
-* **gemini** — Google free-tier, needs ``GEMINI_API_KEY`` env var
-* **openai** — needs ``OPENAI_API_KEY`` env var
-
-All three use OpenAI-compatible chat endpoints via the ``openai`` package.
+The actual API call is delegated to a :class:`GlossProvider` implementation
+(see :mod:`src.gloss.providers`) so the translator stays provider-agnostic.
 
 Usage (standalone test)::
 
@@ -18,374 +13,115 @@ from __future__ import annotations
 
 import json
 import logging
-import os
+import re
 import sys
-from pathlib import Path
 
-import yaml
+from src.core.config import get_settings
+from src.core.paths import WORD_MANIFEST
+from src.gloss.prompts import (
+    SYSTEM_PROMPT_COMPACT,
+    SYSTEM_PROMPT_FULL,
+    build_batch_user,
+)
+from src.gloss.providers import GlossProvider, make_provider
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-
-def _load_config() -> dict:
-    cfg_path = _PROJECT_ROOT / "config.yaml"
-    with open(cfg_path, "r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
-
 
 def _load_available_glosses() -> list[str]:
-    """Load the list of available gloss words from the word manifest."""
-    manifest_path = _PROJECT_ROOT / "assets" / "word_manifest.json"
-    if not manifest_path.is_file():
-        logger.warning("Word manifest not found — LLM will not be constrained to available glosses")
+    """Return non-placeholder glosses from the word manifest, sorted and uniqued."""
+    if not WORD_MANIFEST.is_file():
+        logger.warning(
+            "Word manifest not found — LLM will not be constrained to available glosses"
+        )
         return []
-    with open(manifest_path, "r", encoding="utf-8") as fh:
+    with open(WORD_MANIFEST, "r", encoding="utf-8") as fh:
         data = json.load(fh)
-    glosses = []
+    glosses: set[str] = set()
     for word in data.get("words", []):
         if word.get("source") != "placeholder":
-            glosses.append(word["gloss"].upper())
-    return sorted(set(glosses))
+            glosses.add(word["gloss"].upper())
+    return sorted(glosses)
 
 
-_SYSTEM_PROMPT_FULL = """\
-You are an expert ASL (American Sign Language) linguist. Your task is to \
-translate English sentences into ASL gloss sequences.
-
-ASL GRAMMAR RULES:
-- ASL uses topic-comment structure (topic first, then comment)
-- Omit articles (a, an, the), copulas (is, are, am, was, were), and prepositions when possible
-- Use time indicators at the beginning (YESTERDAY, TOMORROW, NOW, etc.)
-- Questions: put the question word (WHO, WHAT, WHERE, WHEN, WHY, HOW) at the END
-- Negation: put NOT after the verb
-- Adjectives come AFTER the noun
-- Use single uppercase words separated by spaces
-- Each word should be a single sign — avoid multi-word glosses
-
-AVAILABLE SIGNS:
-{available_glosses}
-
-IMPORTANT:
-- Prefer words from the AVAILABLE SIGNS list above
-- If a concept has no exact match, use the closest available sign or break it into simpler signs
-- Output ONLY the gloss sequence as uppercase words separated by spaces
-- Do NOT include punctuation, explanations, or commentary
-- Output one line per input sentence
-
-Examples:
-English: "Where is the library?"
-ASL Gloss: LIBRARY WHERE
-
-English: "I want to go to the store tomorrow."
-ASL Gloss: TOMORROW STORE GO WANT
-
-English: "She is very happy today."
-ASL Gloss: TODAY HAPPY
-"""
-
-# Compact prompt (no glosses list) — ~200 tokens instead of ~4200.
-# Avoids massive KV-cache fill on each new conversation with local LLMs.
-_SYSTEM_PROMPT_COMPACT = """\
-You are an ASL gloss translator. Convert English to ASL gloss notation.
-
-Rules: topic-comment order, drop articles/copulas/prepositions, time words first, \
-question words last, NOT after verb, adjectives after noun.
-
-Output ONLY uppercase words separated by spaces. No punctuation or commentary.
-
-Examples:
-"Where is the library?" → LIBRARY WHERE
-"I want to go to the store tomorrow." → TOMORROW STORE GO WANT
-"She is very happy today." → TODAY HAPPY
-"""
+def _sanitize(words: list[str]) -> list[str]:
+    cleaned = [re.sub(r"[^A-Z0-9\-]", "", w.strip().upper()) for w in words]
+    return [w for w in cleaned if w]
 
 
-# ---------------------------------------------------------------------------
-# Provider resolution
-# ---------------------------------------------------------------------------
-
-_PROVIDER_DEFAULTS = {
-    "ollama": {
-        "model": "llama3.2",
-        "base_url": "http://localhost:11434/v1",
-        "api_key": "ollama",  # Ollama ignores the key but the client requires one
-        "env_key": None,
-    },
-    "gemini": {
-        "model": "gemini-2.0-flash",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "api_key": None,
-        "env_key": "GEMINI_API_KEY",
-    },
-    "openai": {
-        "model": "gpt-4o-mini",
-        "base_url": None,  # default OpenAI endpoint
-        "api_key": None,
-        "env_key": "OPENAI_API_KEY",
-    },
-}
-
-
-def _resolve_provider(cfg: dict) -> tuple[str, str, str | None, str]:
-    """Return (provider, model, base_url, api_key) from config + env."""
-    llm_cfg = cfg.get("llm", {})
-    provider = llm_cfg.get("provider", "ollama").lower()
-
-    if provider not in _PROVIDER_DEFAULTS:
-        raise ValueError(
-            f"Unknown LLM provider '{provider}'. "
-            f"Supported: {', '.join(_PROVIDER_DEFAULTS)}"
-        )
-
-    defaults = _PROVIDER_DEFAULTS[provider]
-    provider_cfg = llm_cfg.get(provider, {})
-
-    model = provider_cfg.get("model", defaults["model"])
-    base_url = provider_cfg.get("base_url", defaults["base_url"])
-
-    # API key: config value > env var > hardcoded default
-    api_key = provider_cfg.get("api_key") or ""
-    if not api_key and defaults["env_key"]:
-        api_key = os.environ.get(defaults["env_key"], "")
-    if not api_key:
-        api_key = defaults.get("api_key") or ""
-
-    if not api_key and provider != "ollama":
-        env_name = defaults["env_key"]
-        raise ValueError(
-            f"API key required for provider '{provider}'. "
-            f"Set the {env_name} environment variable."
-        )
-
-    # Ollama always needs a dummy key for the openai client
-    if provider == "ollama" and not api_key:
-        api_key = "ollama"
-
-    return provider, model, base_url, api_key
+def _parse_numbered(raw: str, n: int) -> dict[int, list[str]]:
+    """Parse ``N. WORD1 WORD2`` lines into ``{0-based-idx: [words]}``."""
+    parsed: dict[int, list[str]] = {}
+    for line in raw.split("\n"):
+        m = re.match(r"^(\d+)\.\s*(.+)$", line.strip())
+        if not m:
+            continue
+        idx = int(m.group(1)) - 1
+        if 0 <= idx < n:
+            parsed[idx] = _sanitize(m.group(2).split())
+    return parsed
 
 
 class GlossTranslator:
-    """Translates English sentences to ASL gloss sequences using an LLM."""
+    """Translate English sentences to ASL gloss sequences using an LLM provider."""
 
-    def __init__(self, api_key: str | None = None) -> None:
-        cfg = _load_config()
-        provider, model, base_url, resolved_key = _resolve_provider(cfg)
+    def __init__(self, provider: GlossProvider | None = None) -> None:
+        settings = get_settings()
+        self._provider = provider or make_provider(settings)
+        self._batch_chunk_size = settings.pipeline.batch_chunk_size
 
-        self._provider = provider
-        self._model = model
-        self._api_key = api_key or resolved_key
-
-        # Gemma models served via the Gemini API don't support the
-        # "system" role (developer instructions).  We fold the system
-        # prompt into the first user message instead.
-        # Native Gemini models (and OpenAI, Ollama) support system prompts.
-        self._system_as_user = model.startswith("gemma")
-
-        # Use compact prompt for local models (saves ~4000 tokens of prompt
-        # processing on every call), full prompt for cloud providers.
-        if provider == "ollama":
-            self._system_prompt = _SYSTEM_PROMPT_COMPACT
+        # Compact prompt for local models (saves ~4000 prompt tokens per call);
+        # full prompt — including the available-gloss list — for cloud providers.
+        if self._provider.name == "ollama":
+            self._system_prompt = SYSTEM_PROMPT_COMPACT
         else:
             available = _load_available_glosses()
-            if available:
-                gloss_str = ", ".join(available)
-            else:
-                gloss_str = "(full WLASL vocabulary — no constraint)"
-            self._system_prompt = _SYSTEM_PROMPT_FULL.format(available_glosses=gloss_str)
-
-        try:
-            import openai
-            client_kwargs: dict = {"api_key": self._api_key}
-            if base_url:
-                client_kwargs["base_url"] = base_url
-            self._client = openai.OpenAI(**client_kwargs)
-        except ImportError:
-            raise ImportError("openai package required. Install with: pip install openai")
+            gloss_str = (
+                ", ".join(available)
+                if available
+                else "(full WLASL vocabulary — no constraint)"
+            )
+            self._system_prompt = SYSTEM_PROMPT_FULL.format(available_glosses=gloss_str)
 
         logger.info(
             "GlossTranslator initialised: provider=%s  model=%s  prompt_mode=%s",
-            provider, self._model,
-            "compact" if provider == "ollama" else "full",
+            self._provider.name,
+            self._provider.model,
+            "compact" if self._provider.name == "ollama" else "full",
         )
+
+    # --- Public API ---------------------------------------------------
 
     def translate(self, english_text: str) -> list[str]:
-        """Translate a single English sentence to ASL gloss sequence.
-
-        Parameters
-        ----------
-        english_text : str
-            The English sentence to translate.
-
-        Returns
-        -------
-        list[str]
-            Ordered list of ASL gloss words, e.g. ["LIBRARY", "WHERE"].
-        """
-        if self._system_as_user:
-            messages = [
-                {"role": "user", "content": (
-                    self._system_prompt
-                    + "\n\n---\n"
-                    + "Now translate the following English text to ASL gloss. "
-                    + "Output ONLY the uppercase gloss words, nothing else.\n\n"
-                    + 'English: "' + english_text.strip() + '"\n'
-                    + "ASL Gloss:"
-                )},
-            ]
-        else:
-            messages = [
-                {"role": "system", "content": self._system_prompt},
-                {"role": "user", "content": english_text.strip()},
-            ]
-
-        response = self._client.chat.completions.create(
-            model=self._model,
-            messages=messages,
-            temperature=0.1,
-            max_tokens=200,
-        )
-
-        raw = response.choices[0].message.content.strip()
-        import re
-        glosses = [
-            re.sub(r'[^A-Z0-9\-]', '', w.strip().upper())
-            for w in raw.split()
-            if w.strip()
-        ]
-        glosses = [g for g in glosses if g]  # drop empty after stripping
-
-        logger.info(
-            "Translated: %r -> %s",
-            english_text[:80], " ".join(glosses),
-        )
+        """Translate a single English sentence into an ordered ASL gloss list."""
+        raw = self._provider.chat(self._system_prompt, english_text.strip())
+        glosses = _sanitize(raw.split())
+        logger.info("Translated: %r -> %s", english_text[:80], " ".join(glosses))
         return glosses
 
-    # Maximum lines per batch chunk
-    _BATCH_CHUNK_SIZE = 10
-
     def translate_batch(self, texts: list[str]) -> list[list[str]]:
-        """Translate multiple English sentences via chunked LLM calls.
+        """Translate many sentences via chunked LLM calls.
 
-        Splits input into chunks of ``_BATCH_CHUNK_SIZE``, sends each as a
-        numbered list, and parses the numbered output.  Falls back to
-        sequential ``translate()`` if batch parsing fails for a chunk.
-
-        Returns
-        -------
-        list[list[str]]
-            One gloss list per input text, in the same order.
+        Each chunk holds at most :attr:`Settings.pipeline.batch_chunk_size`
+        sentences and is sent as a numbered list. The chunk falls back to
+        per-sentence calls if numbered parsing recovers fewer than 70% of lines.
         """
-        import re
-
         if not texts:
             return []
-        # For very small batches, just go sequential
         if len(texts) <= 2:
             return [self.translate(t) for t in texts]
 
-        all_results: list[list[str]] = [[] for _ in texts]
-
-        for chunk_start in range(0, len(texts), self._BATCH_CHUNK_SIZE):
-            chunk = texts[chunk_start : chunk_start + self._BATCH_CHUNK_SIZE]
-            chunk_results = self._translate_batch_chunk(chunk)
+        results: list[list[str]] = [[] for _ in texts]
+        for start in range(0, len(texts), self._batch_chunk_size):
+            chunk = texts[start : start + self._batch_chunk_size]
+            chunk_results = self._translate_chunk(chunk)
             for i, glosses in enumerate(chunk_results):
-                all_results[chunk_start + i] = glosses
-
-        return all_results
-
-    def _translate_batch_chunk(self, texts: list[str]) -> list[list[str]]:
-        """Translate a single chunk of ≤ _BATCH_CHUNK_SIZE sentences."""
-        import re
-
-        # Build numbered input
-        numbered = "\n".join(f"{i+1}. {t.strip()}" for i, t in enumerate(texts))
-        user_content = (
-            "Translate each numbered English sentence to ASL gloss notation.\n"
-            "Apply ASL grammar: topic-comment order, drop articles/copulas, "
-            "question words at END, time words at START.\n"
-            "Do NOT just uppercase the English — restructure the sentence.\n\n"
-            "Examples:\n"
-            '  English: "Where is the library?" → ASL: LIBRARY WHERE\n'
-            '  English: "What is your name?" → ASL: YOUR NAME WHAT\n'
-            '  English: "I\'m Tim." → ASL: ME NAME T-I-M\n'
-            '  English: "Nice to meet you." → ASL: NICE MEET YOU\n'
-            '  English: "She is very happy today." → ASL: TODAY SHE HAPPY\n\n'
-            "Now translate these. Output ONLY: number, period, ASL gloss words.\n\n"
-            + numbered
-        )
-
-        if self._system_as_user:
-            messages = [
-                {"role": "user", "content": self._system_prompt + "\n\n---\n" + user_content},
-            ]
-        else:
-            messages = [
-                {"role": "system", "content": self._system_prompt},
-                {"role": "user", "content": user_content},
-            ]
-
-        try:
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=messages,
-                temperature=0.1,
-                max_tokens=max(200, len(texts) * 40),
-            )
-            raw = response.choices[0].message.content.strip()
-            logger.info("Batch chunk translated %d lines", len(texts))
-
-            # Parse numbered lines: "1. LIBRARY WHERE"
-            parsed: dict[int, list[str]] = {}
-            for line in raw.split("\n"):
-                line = line.strip()
-                m = re.match(r"^(\d+)\.\s*(.+)$", line)
-                if not m:
-                    continue
-                idx = int(m.group(1)) - 1  # 0-based
-                words = [
-                    re.sub(r'[^A-Z0-9\-]', '', w.strip().upper())
-                    for w in m.group(2).split()
-                    if w.strip()
-                ]
-                words = [w for w in words if w]
-                if 0 <= idx < len(texts):
-                    parsed[idx] = words
-
-            # Check if we got enough
-            if len(parsed) >= len(texts) * 0.7:
-                result = [parsed.get(i, []) for i in range(len(texts))]
-                logger.info("Batch parse: %d/%d lines parsed", len(parsed), len(texts))
-                return result
-            else:
-                logger.warning(
-                    "Batch parse insufficient (%d/%d) — falling back to sequential",
-                    len(parsed), len(texts),
-                )
-        except Exception as exc:
-            logger.warning("Batch translation failed — falling back to sequential: %s", exc)
-
-        # Fallback: sequential
-        return [self.translate(t) for t in texts]
+                results[start + i] = glosses
+        return results
 
     def translate_segments(self, segments: list[dict]) -> list[dict]:
-        """Translate multiple transcript segments to ASL gloss sequences.
-
-        Each segment dict gets new fields: ``gloss_sequence`` (list[str])
-        and ``gloss_text`` (str, space-separated).
-
-        Parameters
-        ----------
-        segments : list[dict]
-            Transcript segments with at least a ``text`` field.
-
-        Returns
-        -------
-        list[dict]
-            Segments enriched with gloss data.
-        """
-        results = []
+        """Add ``gloss_sequence`` / ``gloss_text`` fields to each segment dict."""
+        out: list[dict] = []
         for seg in segments:
             enriched = dict(seg)
             try:
@@ -393,17 +129,45 @@ class GlossTranslator:
                 enriched["gloss_sequence"] = glosses
                 enriched["gloss_text"] = " ".join(glosses)
             except Exception as exc:
-                logger.error("Gloss translation failed for %r: %s", seg["text"][:60], exc)
+                logger.error(
+                    "Gloss translation failed for %r: %s", seg["text"][:60], exc
+                )
                 enriched["gloss_sequence"] = []
                 enriched["gloss_text"] = ""
-            results.append(enriched)
-
-        translated = sum(1 for r in results if r["gloss_sequence"])
+            out.append(enriched)
+        translated = sum(1 for r in out if r["gloss_sequence"])
         logger.info(
             "Gloss translation complete: %d/%d segments translated",
-            translated, len(results),
+            translated,
+            len(out),
         )
-        return results
+        return out
+
+    # --- Internals ----------------------------------------------------
+
+    def _translate_chunk(self, texts: list[str]) -> list[list[str]]:
+        user_content = build_batch_user(texts)
+        try:
+            raw = self._provider.chat(
+                self._system_prompt,
+                user_content,
+                max_tokens=max(200, len(texts) * 40),
+            )
+            logger.info("Batch chunk translated %d lines", len(texts))
+            parsed = _parse_numbered(raw, len(texts))
+            if len(parsed) >= len(texts) * 0.7:
+                logger.info("Batch parse: %d/%d lines parsed", len(parsed), len(texts))
+                return [parsed.get(i, []) for i in range(len(texts))]
+            logger.warning(
+                "Batch parse insufficient (%d/%d) — falling back to sequential",
+                len(parsed),
+                len(texts),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Batch translation failed — falling back to sequential: %s", exc
+            )
+        return [self.translate(t) for t in texts]
 
 
 # ---------------------------------------------------------------------------
@@ -412,7 +176,7 @@ class GlossTranslator:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     if len(sys.argv) < 2:
-        print("Usage: python -m src.gloss.translator \"English sentence here\"")
+        print('Usage: python -m src.gloss.translator "English sentence here"')
         sys.exit(1)
 
     text = " ".join(sys.argv[1:])
