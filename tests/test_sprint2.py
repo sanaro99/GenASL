@@ -14,7 +14,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.pipeline.run_pipeline import (
+# Phase E removed the legacy module-level helpers this file exercises
+# (_build_render_plan, _detect_timing_overlaps, _append_run_log,
+# _load_asset_manifest). The surviving behaviours moved into PlanStage /
+# FetchStage and have new focused coverage. Phase G deletes this file.
+pytest.skip(
+    "Legacy run_pipeline helpers removed in Phase E; file deleted in Phase G",
+    allow_module_level=True,
+)
+
+from src.pipeline.run_pipeline import (  # noqa: E402
     _build_render_plan,
     _detect_timing_overlaps,
     _append_run_log,

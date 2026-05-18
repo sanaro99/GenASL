@@ -12,6 +12,14 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+# Phase E removed the legacy _responsible_ai_warnings helper this file
+# tests. The high-asl-ratio RAI warning moved into PlanStage._rai_check.
+# Phase G deletes this file along with src/matcher/ which it also exercises.
+pytest.skip(
+    "Legacy FAISS Matcher path deleted in Phase G; this file goes with it",
+    allow_module_level=True,
+)
+
 # ── Shared config mock (avoids reading config.yaml in some tests) ──────────
 
 _FAKE_CONFIG = {

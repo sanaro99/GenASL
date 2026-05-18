@@ -84,9 +84,10 @@ if run_button:
                 st.stop()
 
         # ── Stage 3: Composite PiP overlay ─────────────────────────
+        # compositor.py still consumes a dict; pass through model_dump().
         with st.spinner("Compositing PiP overlay …"):
             try:
-                output_video = compose_pip(source_video, plan)
+                output_video = compose_pip(source_video, plan.model_dump())
             except Exception as exc:
                 st.error(f"Compositing failed: {exc}")
                 st.stop()
@@ -96,37 +97,32 @@ if run_button:
         st.video(str(output_video))
 
         # ── Run summary ────────────────────────────────────────────
-        summary = plan["summary"]
+        summary = plan.summary
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Total Segments", summary["total_segments"])
-        col2.metric("ASL Segments", summary["asl_segments"])
-        col3.metric("Captions Segments", summary["captions_segments"])
-        col4.metric("Filtered", summary.get("filtered_segments", 0))
+        col1.metric("Total Segments", summary.total_segments)
+        col2.metric("ASL Segments", summary.asl_segments)
+        col3.metric("Captions Segments", summary.captions_segments)
+        col4.metric("Filtered", summary.filtered_segments)
 
         st.markdown("---")
-        pipeline_info = plan.get("pipeline", {})
         st.markdown(
-            f"**Run ID:** `{plan['run_id']}`  \n"
-            f"**Mode:** {pipeline_info.get('mode', 'n/a')}  \n"
-            f"**LLM Model:** {pipeline_info.get('model', 'n/a')}  \n"
-            f"**Timing overlaps detected:** {summary.get('timing_overlaps', 0)}  \n"
-            f"**Overlaps resolved:** {summary.get('overlaps_resolved', 0)}"
+            f"**Run ID:** `{plan.run_id}`  \n"
+            f"**Mode:** {plan.pipeline.mode}  \n"
+            f"**Provider / Model:** {plan.pipeline.provider} / {plan.pipeline.model}  \n"
+            f"**Timing overlaps detected:** {summary.timing_overlaps}  \n"
+            f"**Overlaps resolved:** {summary.overlaps_resolved}"
         )
 
         # Show gloss details per segment
         with st.expander("Segment Gloss Details"):
-            for seg in plan.get("segments", []):
-                match_info = seg.get("match", {})
-                action = match_info.get("action", "?")
-                gloss_text = match_info.get("gloss_text", "")
-                found = match_info.get("found_glosses", [])
-                missing = match_info.get("missing_glosses", [])
+            for seg in plan.segments:
+                m = seg.match
                 st.markdown(
-                    f"**{seg['segment_id']}** [{action}] "
-                    f"*\"{seg['source_text'][:80]}\"*  \n"
-                    f"Gloss: `{gloss_text}`  \n"
-                    f"Found: {', '.join(found) if found else 'none'} | "
-                    f"Missing: {', '.join(missing) if missing else 'none'}"
+                    f"**{seg.segment_id}** [{m.action}] "
+                    f"*\"{seg.source_text[:80]}\"*  \n"
+                    f"Gloss: `{m.gloss_text}`  \n"
+                    f"Found: {', '.join(m.found_glosses) if m.found_glosses else 'none'} | "
+                    f"Missing: {', '.join(m.missing_glosses) if m.missing_glosses else 'none'}"
                 )
 
         st.markdown(
