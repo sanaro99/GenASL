@@ -17,11 +17,12 @@ logger = logging.getLogger(__name__)
 
 
 class TranslateStage(Stage[TranslateInput, TranslateOutput]):
-    """Run each transcript segment through the LLM gloss translator.
+    """Run all transcript segments through the LLM gloss translator.
 
-    Sequential translation (one LLM call per segment) preserves parity with
-    the old ``run_pipeline.run()`` behaviour. The API server's bulk-translate
-    path keeps using ``GlossTranslator.translate_batch`` directly.
+    Uses ``GlossTranslator.translate_batch`` (chunked) — this is what the
+    API server has used in production since the batch path was added.
+    Per-segment ``.translate()`` is reserved for the ``/asl`` ad-hoc caption
+    endpoint and as the batch fallback path.
     """
 
     name = "translate"
@@ -54,13 +55,15 @@ class TranslateStage(Stage[TranslateInput, TranslateOutput]):
 
     def process(self, inp: TranslateInput) -> TranslateOutput:
         translator = self._get_translator()
+        texts = [s.text for s in inp.segments]
+        try:
+            all_glosses = translator.translate_batch(texts)
+        except Exception as exc:
+            logger.error("Batch gloss translation failed: %s", exc)
+            all_glosses = [[] for _ in texts]
+
         out: list[GlossSegment] = []
-        for seg in inp.segments:
-            try:
-                glosses = translator.translate(seg.text)
-            except Exception as exc:
-                logger.error("Gloss translation failed for %r: %s", seg.text[:60], exc)
-                glosses = []
+        for seg, glosses in zip(inp.segments, all_glosses):
             out.append(GlossSegment(
                 segment_id=seg.segment_id,
                 start_ms=seg.start_ms,
