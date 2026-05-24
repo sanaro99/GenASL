@@ -62,11 +62,8 @@ Violating them invalidates the work.
 5. **Pydantic models, not dicts, between stages.** The schema in
    `src/pipeline/models.py` is authoritative; new fields land there.
    Bump `schema_version` only on a breaking change to `AvatarRenderPlan`.
-
-6. **"Augmentation, not replacement."** Any public-facing text
-   (README, docs, demo copy) must say so. We are an augmentation tool
-   for learners and supplementary access — not a substitute for human
-   interpretation.
+   
+6. **Market expansion, not substitution.** GenASL serves the underserved — content that today has no ASL at all because human interpretation isn't economically viable for it. Human interpreters remain the gold standard for live, high-stakes, nuanced settings, and broader ambient ASL exposure created by GenASL increases demand and visibility for their work. Public-facing copy must reflect this: we expand the pie, we don't take a slice from interpreters.
 
 ---
 
@@ -179,7 +176,7 @@ never from config.
 |-------|--------|
 | 1 — Bootstrap | **Done** |
 | 2 — Audio backbone | **Done** |
-| 3 — Interpreter brain | Pending |
+| 3 — Interpreter brain | **Done** |
 | 4 — Pose library | Pending |
 | 5 — Motion synthesis + NMM | Pending |
 | 6 — Chrome extension VRM | Pending |
