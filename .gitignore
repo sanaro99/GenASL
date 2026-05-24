@@ -66,3 +66,9 @@ assets/chained/
 
 # Pipeline stage disk cache (regenerated on first run)
 data/cache/
+
+# Runtime transcript cache (refetched on demand)
+transcripts/
+
+# Local Claude Code / IDE state
+.claude/
