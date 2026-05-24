@@ -36,7 +36,13 @@ def get_video_dimensions(video_path: Path) -> tuple[int, int]:
     if result.returncode != 0:
         raise RuntimeError(f"ffprobe failed: {result.stderr[:300]}")
     info = json.loads(result.stdout)
-    stream = info["streams"][0]
+    streams = info.get("streams", [])
+    if not streams:
+        raise RuntimeError(
+            f"No video stream found in {video_path.name} — file may be "
+            f"audio-only or corrupted (ffprobe returned no video streams)."
+        )
+    stream = streams[0]
     return int(stream["width"]), int(stream["height"])
 
 
