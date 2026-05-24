@@ -1,268 +1,217 @@
 # GenASL — Architecture Overview
 
-> **Version:** 1.0 — March 2026  
-> **Status:** Proof of Concept
-
-## System Summary
-
-GenASL is an AI-powered pipeline that converts English YouTube video transcripts into timed American Sign Language (ASL) video overlays. It combines LLM-based gloss translation, a curated sign video library (WLASL), FFmpeg clip chaining, and a Chrome extension to deliver an accessible viewing experience for Deaf and Hard of Hearing (DHH) users.
+> **Status:** Phase 1 (bootstrap) landed; Phases 2–7 in build-out per
+> [`docs/plan/`](plan/). This document is the **technical reference** for
+> the system once fully wired. New contributors should read this *before*
+> picking up a phase plan.
 
 ---
 
-## High-Level Architecture
+## 1. System summary
+
+GenASL produces a **3D-avatar ASL interpreter overlay** for any YouTube video.
+The Chrome extension asks the local FastAPI server for an `AvatarRenderPlan`
+(schema v5.0). The server runs a six-stage pipeline that mimics how a human
+interpreter works:
+
+1. **Listen** — pull the source video's audio and run ASR + prosody +
+   emotion analysis.
+2. **Plan** — feed the analysed audio (text + prosody + emotion) to a
+   "interpreter brain" LLM that produces a structured ASL plan (manual
+   sign sequence + non-manual marker intent + emphasis + grammar).
+3. **Sign** — retrieve real Deaf-signer motion clips for each sign in the
+   plan, interpolate smoothly between them, and generate a parallel
+   facial-blendshape track from prosody.
+4. **Render** — return a JSON timeline; the extension drives a Ready Player
+   Me VRM avatar in a PiP canvas, synced to the host `<video>` element.
+
+The pipeline is **retrieval-augmented**: hand poses come from a curated
+library extracted from Deaf-signer clips, not from a pure-generative model.
+This is the most important architectural choice — see
+[`business/feasibility-study/01-technology-feasibility.md`](../business/feasibility-study/01-technology-feasibility.md)
+§ 1.5 for the rationale (determinism, auditability, bounded failure modes,
+Deaf-community acceptance).
+
+---
+
+## 2. End-to-end flow
 
 ```mermaid
 flowchart TB
-    subgraph Browser ["Chrome Browser"]
-        YT["YouTube Video Page"]
-        EXT["Chrome Extension<br/>(content.js)"]
-        POPUP["Extension Popup<br/>(popup.js)"]
-    end
+  subgraph BROWSER["Chrome browser"]
+    YT["YouTube watch page<br/>&lt;video&gt; element"]
+    CS["content.js<br/>(extension)"]
+    CANVAS["three.js + @pixiv/three-vrm<br/>PiP canvas (Phase 6)"]
+  end
 
-    subgraph Server ["FastAPI Server :8794"]
-        API["REST API Endpoints"]
-        TRANS["Transcript Fetcher"]
-        LLM["Gloss Translator<br/>(LLM)"]
-        LOOKUP["Word Lookup"]
-        CHAIN["Clip Chainer<br/>(FFmpeg)"]
-    end
+  subgraph SERVER["FastAPI :8794"]
+    EP["POST /asl/avatar"]
+    PIPE["InterpreterAvatarPipeline"]
+  end
 
-    subgraph Data ["Data & Assets"]
-        WLASL["WLASL v0.3<br/>2,000 glosses<br/>1,998 video clips"]
-        MANIFEST["word_manifest.json"]
-        CACHE["Transcript Cache<br/>(transcripts/)"]
-        CLIPS["Chained Clips<br/>(assets/chained/)"]
-    end
+  subgraph STAGES["Pipeline stages (per-stage disk cache)"]
+    direction TB
+    S1["1 AudioIngest<br/>yt-dlp + ffmpeg → 16k mono WAV"]
+    S2["2 AudioAnalyze<br/>faster-whisper + librosa + emotion"]
+    S3["3 SemanticChunk<br/>VAD pauses + clause punctuation"]
+    S4["4 InterpreterPlan<br/>LLM persona = interpreter brain"]
+    S5["5 MotionSynth<br/>retrieve + spline-interp + NMM"]
+    S6["6 AvatarTimeline<br/>emit AvatarRenderPlan v5.0"]
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6
+  end
 
-    subgraph LLMProviders ["LLM Providers"]
-        OLLAMA["Ollama (local)<br/>gemma3:4b / qwen3:4b"]
-        GEMINI["Google Gemini<br/>gemini-2.0-flash"]
-        OPENAI["OpenAI<br/>gpt-4o-mini"]
-    end
+  subgraph DATA["Data / assets"]
+    POSE["assets/pose_library/<br/>per-gloss joint-angle JSON"]
+    WLASL["assets/wlasl_clips/<br/>Deaf-signer source clips"]
+    AUDIO["data/audio_cache/<br/>extracted WAVs"]
+    CACHE["data/cache/<br/>per-stage JSON"]
+  end
 
-    YT --> EXT
-    EXT -->|"POST /asl/transcript<br/>{video_id}"| API
-    POPUP -->|"GET /health"| API
-    API --> TRANS
-    TRANS -->|"youtube-transcript-api<br/>+ yt-dlp fallback"| YT
-    TRANS --> CACHE
-    API --> LLM
-    LLM -->|"OpenAI-compat API"| OLLAMA
-    LLM -->|"OpenAI-compat API"| GEMINI
-    LLM -->|"OpenAI-compat API"| OPENAI
-    API --> LOOKUP
-    LOOKUP --> MANIFEST
-    MANIFEST --> WLASL
-    API --> CHAIN
-    CHAIN --> CLIPS
-    CLIPS -->|"GET /clips/*.mp4"| EXT
-
-    style Browser fill:#1a1a2e,stroke:#2196f3,color:#eee
-    style Server fill:#0d2137,stroke:#4caf50,color:#eee
-    style Data fill:#1b2838,stroke:#ff9800,color:#eee
-    style LLMProviders fill:#2d1b38,stroke:#9c27b0,color:#eee
+  YT --> CS
+  CS -- "video_id" --> EP
+  EP --> PIPE --> S1
+  S1 -.uses.-> AUDIO
+  S5 -.uses.-> POSE
+  POSE -.built once from.-> WLASL
+  STAGES -.shared.-> CACHE
+  S6 -- "AvatarRenderPlan JSON" --> EP
+  EP --> CS --> CANVAS --> YT
 ```
 
 ---
 
-## Request Flow — Batch Transcript Architecture
+## 3. Stages — contracts and responsibilities
 
-When a user navigates to a YouTube video, the entire transcript is fetched and translated in **one server call**. During playback, zero API calls are made.
+Each stage subclasses `src.pipeline.stages.base.Stage[InT, OutT]` and ships its
+output to the next stage as a typed Pydantic model. Every stage hashes its
+input + relevant settings into a fingerprint and caches its output as JSON
+under `data/cache/<stage_name>/<key>.json`, so reruns hit disk.
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant YT as YouTube
-    participant CS as content.js
-    participant API as FastAPI Server
-    participant TF as Transcript Fetcher
-    participant GT as Gloss Translator
-    participant WL as Word Lookup
-    participant CC as Clip Chainer
-    participant LLM as LLM Provider
+| # | Stage | Input | Output | What it does | Lands in |
+|---|-------|-------|--------|--------------|----------|
+| 1 | `AudioIngestStage` | `AudioIngestInput(video_id)` | `AudioIngestOutput(audio_path, duration_ms, sample_rate_hz)` | yt-dlp → MP4 → ffmpeg rip → 16 kHz mono WAV in `data/audio_cache/` | Phase 2 |
+| 2 | `AudioAnalyzeStage` | `AudioAnalyzeInput(audio_path, duration_ms)` | `AudioAnalyzeOutput(analysis: AudioAnalysis)` | faster-whisper ASR (word-level timestamps), librosa prosody, LLM-from-text emotion. Run as 3 parallel threads. | Phase 2 |
+| 3 | `SemanticChunkStage` | `SemanticChunkInput(analysis)` | `SemanticChunkOutput(chunks: list[InterpreterChunk])` | Combine VAD silences ≥ 500 ms with clause-boundary punctuation to cut audio into coherent semantic units (target 20–240 chars each) | Phase 3 |
+| 4 | `InterpreterPlanStage` | `InterpreterPlanInput(chunks)` | `InterpreterPlanOutput(segments: list[AslPlanSegment], provider, model)` | LLM persona: "you are an ASL interpreter; given this text + emotion + emphasis, produce a structured plan with sign sequence, topic-comment grammar, NMM intent, emphasis flags." Calls one of Ollama/Gemini/OpenAI via `src.llm.providers.make_provider`. | Phase 3 |
+| 5 | `MotionSynthStage` | `MotionSynthInput(segments)` | `MotionSynthOutput(motion: list[MotionFrame], nmm: list[NmmFrame], duration_ms)` | For each sign in the plan: retrieve keyframes from `assets/pose_library/`. Spline-interpolate between signs (default 120 ms transitions). Generate face blendshapes from prosody + `nmm_intent` (brow raise for yes-no questions, head tilt for negation, mouth shape for adverbials, intensity for emphasis). | Phase 5 |
+| 6 | `AvatarTimelineStage` | `AvatarTimelineInput(motion, nmm, plan_segments, …)` | `AvatarRenderPlan` v5.0 | Bundle motion + NMM + plan + optional debug payload, stamp run_id + generated_at, return. | Phase 5 |
 
-    U->>YT: Navigate to /watch?v=VIDEO_ID
-    YT->>CS: Page loads, content script injected
-    CS->>CS: Extract video ID from URL
-    CS->>API: POST /asl/transcript {video_id}
-    
-    Note over CS: Shows "Loading ASL transcript…"
-    
-    API->>API: Check transcript cache
-    alt Cache miss
-        API->>TF: fetch_transcript(video_id)
-        TF->>YT: youtube-transcript-api<br/>[en, en-GB, en-US, en-AU, en-CA]
-        alt API blocked
-            TF->>YT: yt-dlp subtitle fallback
-        end
-        TF-->>API: [{start_ms, end_ms, text}, ...]
-        
-        API->>GT: translate_batch(texts)
-        loop Each chunk of 10 lines
-            GT->>LLM: Chat completion (numbered list)
-            LLM-->>GT: Numbered ASL gloss output
-        end
-        GT-->>API: [[HELLO, NAME, WHAT], ...]
-        
-        loop Each segment with glosses
-            API->>WL: lookup_sequence(glosses)
-            WL-->>API: [{gloss, path, found}, ...]
-            API->>CC: chain_clips(word_entries, clip_name)
-            CC-->>API: {path, duration_ms}
-        end
-    end
-    
-    API-->>CS: TranscriptResponse {entries[], cached}
-    
-    Note over CS: Stores playlist, hides loading label
-    
-    loop Every 250ms during playback
-        CS->>CS: Check currentTime vs playlist
-        CS->>CS: Enqueue clip if new segment
-        CS->>API: GET /clips/{name}.mp4
-        API-->>CS: MP4 video data
-        CS->>CS: Play in overlay with adaptive speed
-    end
+### Data shapes (excerpt — full schema in [`src/pipeline/models.py`](../src/pipeline/models.py))
+
+```python
+class AudioAnalysis:
+    duration_ms: int
+    asr_words: list[WordTiming]        # word + start_ms + end_ms
+    prosody:   list[ProsodyFrame]      # 50 ms frames: t_ms, f0_hz, rms, voiced
+    emotion:   list[EmotionLabel]      # spans: start_ms, end_ms, label, intensity
+
+class InterpreterChunk:
+    chunk_id: str; start_ms, end_ms: int; text: str
+    dominant_emotion: str; emotion_intensity: float
+    f0_range_hz: tuple[float, float]; rms_mean, speaking_rate_wps: float
+    ended_with_pause: bool
+
+class AslPlanSegment:
+    chunk_id: str; start_ms, end_ms: int
+    topic_comment: list[str]           # e.g. ["TOPIC: SCHOOL", "COMMENT: GO YESTERDAY"]
+    sign_sequence: list[str]            # internal gloss tokens, never user-facing
+    nmm_intent: dict[str, float]        # e.g. {"brow_raise": 0.8, "head_tilt_left": 0.4}
+    emphasis_signs: list[str]; role_shifts: list[dict]; notes: str
+
+class MotionFrame: t_ms: int; bone_rotations: dict[str, list[float]]; position
+class NmmFrame:    t_ms: int; blendshapes: dict[str, float]                   # ARKit names
+
+class AvatarRenderPlan:
+    schema_version: "5.0"; run_id; video_id; generated_at: str
+    duration_ms; frame_rate: int
+    motion: list[MotionFrame]; nmm: list[NmmFrame]
+    plan_segments: list[AslPlanSegment]
+    debug: dict | None    # ASR/prosody/emotion traces; omitted in extension responses
 ```
 
 ---
 
-## Component Map
+## 4. Technology stack
 
-| Component | Location | Language | Purpose |
-|-----------|----------|----------|---------|
-| **FastAPI Server** | `src/api/server.py` | Python | REST API bridging extension to pipeline |
-| **Transcript Fetcher** | `src/transcript_ingestion/fetcher.py` | Python | YouTube transcript retrieval + normalization |
-| **Gloss Translator** | `src/gloss/translator.py` | Python | LLM-based English → ASL gloss translation |
-| **Word Lookup** | `src/gloss/word_lookup.py` | Python | Gloss → video clip path resolution |
-| **Clip Chainer** | `src/gloss/chainer.py` | Python | FFmpeg concat demuxer for clip sequences |
-| **Semantic Matcher** | `src/matcher/matcher.py` | Python | FAISS + sentence-transformers matching |
-| **Pipeline Runner** | `src/pipeline/run_pipeline.py` | Python | End-to-end orchestration (standalone mode) |
-| **PiP Compositor** | `src/compositor/compositor.py` | Python | FFmpeg Picture-in-Picture overlay composer |
-| **Video Downloader** | `src/compositor/downloader.py` | Python | yt-dlp source video download |
-| **Streamlit UI** | `src/ui/app.py` | Python | Web interface for standalone pipeline runs |
-| **Chrome Extension** | `chrome-extension/` | JS/HTML/CSS | YouTube page overlay + playback sync |
-
----
-
-## Two Execution Modes
-
-GenASL supports two ways to produce ASL overlays:
-
-### Mode 1: Real-Time Chrome Extension (Primary)
-
-```mermaid
-flowchart LR
-    A["YouTube Video"] -->|"Video ID"| B["FastAPI Server"]
-    B -->|"Transcript + Glosses + Clips"| C["Chrome Extension"]
-    C -->|"Timed overlay"| D["Viewer sees ASL"]
-    
-    style A fill:#ff5722,color:#fff
-    style B fill:#4caf50,color:#fff
-    style C fill:#2196f3,color:#fff
-    style D fill:#9c27b0,color:#fff
-```
-
-- **Use case:** Live YouTube viewing with ASL overlay
-- **Latency:** ~60s initial load (transcript + translation + clip building), then zero
-- **Output:** PiP overlay on YouTube player with pause/play/seek sync
-
-### Mode 2: Offline Pipeline + Compositor (Standalone)
-
-```mermaid
-flowchart LR
-    A["YouTube Video ID"] -->|"Pipeline"| B["Render Plan JSON"]
-    B -->|"Compositor"| C["Output MP4 with<br/>burned-in ASL overlay"]
-    
-    style A fill:#ff5722,color:#fff
-    style B fill:#ff9800,color:#fff
-    style C fill:#4caf50,color:#fff
-```
-
-- **Use case:** Pre-rendered video production, testing, demo
-- **Output:** Full MP4 file with ASL clips composited as PiP + disclosure label
-- **Command:** `python -m src.pipeline.run_pipeline <VIDEO_ID>`
+| Layer | Choice | Rationale |
+|-------|--------|-----------|
+| Audio download | yt-dlp | Already used; reliable for YouTube |
+| ASR | `faster-whisper` (CTranslate2) on CPU | Best speed/quality for local CPU; word-level timestamps |
+| Prosody | `librosa` | Standard; CPU-only; gives F0, RMS, voicing |
+| Emotion | LLM-from-text-and-prosody-summary | Avoids a second ~1 GB HF audio model; cheaper API call instead |
+| Interpreter LLM | Gemini 2.0 Flash / OpenAI / Ollama | Multi-provider abstraction in `src/llm/providers/` |
+| Pose extraction | `mediapipe` (Holistic) | Tracks pose + hands + face from RGB; no MoCap rig needed |
+| Motion library | JSON keyframes per gloss | Diffable, audit-friendly, swappable per signer |
+| Avatar rig | Ready Player Me VRM | Free, web-friendly, ARKit blendshape support |
+| Renderer | three.js + @pixiv/three-vrm in browser | Real-time, no server GPU, follows video state |
+| Pipeline | Per-stage disk-cached Pydantic stages | Reruns are JSON reads; fingerprint = settings + input hash |
 
 ---
 
-## Data Flow Summary
+## 5. Configuration
 
-```
-YouTube Video
-    │
-    ▼
-┌───────────────────────┐
-│  Transcript Ingestion  │  youtube-transcript-api → yt-dlp fallback
-│  (fetcher.py)          │  Output: [{start_ms, end_ms, text}, ...]
-└───────────┬───────────┘
-            │
-            ▼
-┌───────────────────────┐
-│  Gloss Translation     │  LLM converts English → ASL gloss
-│  (translator.py)       │  "What's your name?" → [YOUR, NAME, WHAT]
-└───────────┬───────────┘
-            │
-            ▼
-┌───────────────────────┐
-│  Word Lookup           │  Maps each gloss to a video clip file
-│  (word_lookup.py)      │  YOUR → W1997_YOUR.mp4, NAME → W1264_NAME.mp4
-└───────────┬───────────┘
-            │
-            ▼
-┌───────────────────────┐
-│  Clip Chaining         │  FFmpeg concat demuxer joins clips
-│  (chainer.py)          │  [YOUR.mp4 + NAME.mp4 + WHAT.mp4] → chained.mp4
-└───────────┬───────────┘
-            │
-            ▼
-┌───────────────────────┐
-│  Playback / Overlay    │  Chrome extension or FFmpeg compositor
-│  (content.js / comp.)  │  Timed PiP overlay on YouTube video
-└───────────────────────┘
-```
+All settings live in `src/core/config.py` (Pydantic) with overrides in
+`config.yaml`. The relevant sections:
+
+| Section | What it controls |
+|---------|------------------|
+| `llm` | Provider (ollama / gemini / openai) and per-provider model + base URL |
+| `audio` | Whisper model size + compute type, language, VAD silence threshold, prosody stride, emotion window |
+| `interpreter` | Per-call char caps, LLM temperature, optional grammar features (role shifts, classifiers) |
+| `avatar` | Rig (vrm), avatar URL, frame rate, default sign duration, transition length, PiP width |
+| `api` | Host, port, response cache size |
+| `paths` | Logs, caches, pose library, source clips |
+
+Per-stage tunables (e.g. `audio.asr_model`) feed the stage's `fingerprint()`,
+so changing a model invalidates only the affected cache rather than the
+whole pipeline.
 
 ---
 
-## Technology Stack
+## 6. API contract
 
-| Layer | Technology | Version | Purpose |
-|-------|-----------|---------|---------|
-| **Runtime** | Python | 3.14.0 | Core pipeline language |
-| **Web Server** | FastAPI + Uvicorn | Latest | Async REST API |
-| **LLM Client** | openai (Python) | 2.24.0 | Unified client for all providers |
-| **Transcript** | youtube-transcript-api | 1.2.4 | Primary transcript source |
-| **Transcript (fallback)** | yt-dlp | Latest | Auto-subtitle extraction |
-| **Embeddings** | sentence-transformers | 3.4.1 | MiniLM-L6-v2 encoder |
-| **Vector Search** | faiss-cpu | 1.13.2 | Nearest-neighbour matching |
-| **Video Processing** | FFmpeg | 8.0.1 | Clip chaining + PiP compositing |
-| **Browser** | Chrome Extension | Manifest V3 | YouTube page injection |
-| **UI** | Streamlit | Latest | Standalone web interface |
-| **Testing** | pytest | 8.3.5 | 48 unit/integration tests |
+| Endpoint | Method | Request | Response |
+|---|---|---|---|
+| `/health` | GET | — | `{status, time, version, pipeline, vrm_model_url, ready: bool}` — `ready` is `false` until Phases 2–5 land |
+| `/asl/avatar` | POST | `{video_id: "<11-char YouTube ID>"}` | `AvatarRenderPlan` v5.0 JSON, or `503 {error, phase_status}` while pipeline is in build-out |
+
+Future: a `/clips/{filename}` route may be added if avatar customisation needs
+server-hosted assets; for now the VRM model loads directly from a CDN URL.
 
 ---
 
-## Configuration
+## 7. Extension contract
 
-All tuneable parameters live in [`config.yaml`](../config.yaml):
+The Chrome extension (`chrome-extension/content.js`) runs on YouTube watch pages.
+Once Phase 6 lands, the lifecycle is:
 
-```yaml
-llm:
-  provider: "ollama"           # ollama | gemini | openai
-  ollama:
-    model: "gemma3:4b"         # Local model
-    base_url: "http://localhost:11434/v1"
-  gemini:
-    model: "gemini-2.0-flash"  # Cloud model (needs GEMINI_API_KEY)
-  openai:
-    model: "gpt-4o-mini"       # Cloud model (needs OPENAI_API_KEY)
+1. On page load, detect `?v=<id>` and POST to `/asl/avatar`.
+2. Mount a three.js canvas in a PiP container (`AvatarSettings.pip_width_ratio`).
+3. Load the VRM avatar from `AvatarSettings.vrm_model_url`.
+4. Drive the avatar from the `motion[]` + `nmm[]` arrays, advancing the
+   playback head from the host `<video>.currentTime`.
+5. Re-sync on `play` / `pause` / `seeked` / `ratechange` events.
+6. Tear down on SPA navigation away from the watch page.
 
-matcher:
-  confidence_threshold: 0.80   # Minimum cosine similarity for ASL match
-```
+---
 
-See the individual component documentation for detailed configuration options:
-- [Transcript Ingestion](transcript-ingestion.md)
-- [Gloss Translation Pipeline](gloss-translation-pipeline.md)
-- [Clip Chaining & Overlay Delivery](clip-chaining-and-overlay.md)
-- [API Server](api-server.md)
-- [Chrome Extension](chrome-extension.md)
+## 8. What's deliberately *not* in scope
+
+| | |
+|---|---|
+| Photorealistic avatar (Gaussian splats, MetaHuman) | Out — RPM VRM is enough for a prototype; photorealism without Deaf-community testing is a reputational risk |
+| Trained motion-transition model | Out for v1 — spline interpolation is the simple baseline; a learned model can replace it once we have user feedback |
+| Live broadcast latency optimisation | Out — prototype targets offline / on-demand YouTube content |
+| Long-tail vocabulary beyond the WLASL library | Out — Phase 4 caps at the WLASL ~2 k glosses; missing signs degrade gracefully (skipped with a debug note) |
+| Multi-signer / identity selection | Out — single avatar v1; identity selection added once corpus expands |
+| Deaf-community pilot / quality evaluation | Out of the *code* scope, but **must precede any external claim of fidelity** — see `business/feasibility-study/05-feasibility-verdict.md` § 5.2 |
+
+---
+
+## 9. References
+
+- [`business/feasibility-study/`](../business/feasibility-study/) — strategic + architectural rationale (read first)
+- [`docs/plan/`](plan/) — per-phase implementation roadmap (read before picking up a phase)
+- [`src/pipeline/models.py`](../src/pipeline/models.py) — canonical v5.0 schema
+- [`src/core/config.py`](../src/core/config.py) — canonical settings
+- [`src/pipeline/stages/base.py`](../src/pipeline/stages/base.py) — `Stage` ABC, cache semantics
