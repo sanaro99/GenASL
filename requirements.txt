@@ -12,12 +12,12 @@ openai>=1.0.0
 # extraction; youtube-transcript-api is gone (we go audio-first now).
 yt-dlp
 
-# --- Phase 2 (audio backbone) — add when wiring AudioIngest/Analyze stages ---
-# faster-whisper>=1.0.0
-# librosa>=0.10
-# soundfile>=0.12
-# numpy
-#
+# Audio backbone (Phase 2 — Stages 1–2)
+faster-whisper>=1.0.0
+librosa>=0.10
+soundfile>=0.12
+numpy
+
 # --- Phase 4 (pose library, offline) — add when running build_pose_library.py ---
 # mediapipe>=0.10
 # opencv-python
