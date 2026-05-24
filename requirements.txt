@@ -1,10 +1,26 @@
-youtube-transcript-api==1.2.4
-pytest==8.3.5
+# Core runtime
 pyyaml==6.0.2
 pydantic>=2.0
-yt-dlp
 requests
-openai>=1.0.0
 fastapi
 uvicorn
-streamlit
+
+# LLM providers (interpreter brain — Stages 3–4)
+openai>=1.0.0
+
+# Source-video fetch (Stage 1) — yt-dlp pulls the merged MP4 for audio
+# extraction; youtube-transcript-api is gone (we go audio-first now).
+yt-dlp
+
+# --- Phase 2 (audio backbone) — add when wiring AudioIngest/Analyze stages ---
+# faster-whisper>=1.0.0
+# librosa>=0.10
+# soundfile>=0.12
+# numpy
+#
+# --- Phase 4 (pose library, offline) — add when running build_pose_library.py ---
+# mediapipe>=0.10
+# opencv-python
+
+# Dev / tests
+pytest==8.3.5

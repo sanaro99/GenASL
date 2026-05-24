@@ -18,11 +18,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.core.config import LLMProviderCfg
-from src.gloss.providers import GlossProvider, make_provider
-from src.gloss.providers.fake import FakeProvider
-from src.gloss.providers.gemini import GeminiProvider
-from src.gloss.providers.ollama import OllamaProvider
-from src.gloss.providers.openai import OpenAIProvider
+from src.llm.providers import GlossProvider, make_provider
+from src.llm.providers.fake import FakeProvider
+from src.llm.providers.gemini import GeminiProvider
+from src.llm.providers.ollama import OllamaProvider
+from src.llm.providers.openai import OpenAIProvider
 
 
 def _patched_openai_returning(content: str):
@@ -49,7 +49,7 @@ def test_fake_provider_satisfies_protocol():
 
 
 def test_ollama_provider_satisfies_protocol():
-    with patch("src.gloss.providers.ollama.openai.OpenAI", return_value=_patched_openai_returning("LIBRARY")):
+    with patch("src.llm.providers.ollama.openai.OpenAI", return_value=_patched_openai_returning("LIBRARY")):
         p = OllamaProvider(LLMProviderCfg(model="llama3.2"))
     assert isinstance(p, GlossProvider)
     assert p.name == "ollama"
@@ -58,7 +58,7 @@ def test_ollama_provider_satisfies_protocol():
 
 def test_openai_provider_satisfies_protocol(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    with patch("src.gloss.providers.openai.openai.OpenAI", return_value=_patched_openai_returning("LIBRARY")):
+    with patch("src.llm.providers.openai.openai.OpenAI", return_value=_patched_openai_returning("LIBRARY")):
         p = OpenAIProvider(LLMProviderCfg(model="gpt-4o-mini"))
     assert isinstance(p, GlossProvider)
     assert p.name == "openai"
@@ -66,7 +66,7 @@ def test_openai_provider_satisfies_protocol(monkeypatch):
 
 def test_gemini_provider_satisfies_protocol(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-    with patch("src.gloss.providers.gemini.openai.OpenAI", return_value=_patched_openai_returning("LIBRARY")):
+    with patch("src.llm.providers.gemini.openai.OpenAI", return_value=_patched_openai_returning("LIBRARY")):
         p = GeminiProvider(LLMProviderCfg(model="gemini-2.0-flash"))
     assert isinstance(p, GlossProvider)
     assert p.name == "gemini"
@@ -100,7 +100,7 @@ def _captured_messages(mock_client) -> list[dict]:
 
 def test_ollama_routes_gemma_into_user_message():
     client = _patched_openai_returning("FOO")
-    with patch("src.gloss.providers.ollama.openai.OpenAI", return_value=client):
+    with patch("src.llm.providers.ollama.openai.OpenAI", return_value=client):
         p = OllamaProvider(LLMProviderCfg(model="gemma3:4b"))
     p.chat("system text", "user text")
     msgs = _captured_messages(client)
@@ -112,7 +112,7 @@ def test_ollama_routes_gemma_into_user_message():
 
 def test_ollama_keeps_system_role_for_non_gemma():
     client = _patched_openai_returning("FOO")
-    with patch("src.gloss.providers.ollama.openai.OpenAI", return_value=client):
+    with patch("src.llm.providers.ollama.openai.OpenAI", return_value=client):
         p = OllamaProvider(LLMProviderCfg(model="llama3.2"))
     p.chat("system text", "user text")
     msgs = _captured_messages(client)
@@ -122,7 +122,7 @@ def test_ollama_keeps_system_role_for_non_gemma():
 def test_gemini_routes_gemma_into_user_message(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     client = _patched_openai_returning("FOO")
-    with patch("src.gloss.providers.gemini.openai.OpenAI", return_value=client):
+    with patch("src.llm.providers.gemini.openai.OpenAI", return_value=client):
         p = GeminiProvider(LLMProviderCfg(model="gemma-3-27b-it"))
     p.chat("system text", "user text")
     msgs = _captured_messages(client)
@@ -133,7 +133,7 @@ def test_gemini_routes_gemma_into_user_message(monkeypatch):
 def test_openai_never_folds_system_into_user(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     client = _patched_openai_returning("FOO")
-    with patch("src.gloss.providers.openai.openai.OpenAI", return_value=client):
+    with patch("src.llm.providers.openai.openai.OpenAI", return_value=client):
         p = OpenAIProvider(LLMProviderCfg(model="gpt-4o-mini"))
     p.chat("system text", "user text")
     msgs = _captured_messages(client)
@@ -146,9 +146,9 @@ def test_openai_never_folds_system_into_user(monkeypatch):
 
 def test_make_provider_constructs_configured_provider():
     """The factory returns the provider type matching settings.llm.provider."""
-    from src.core.config import Settings
+    from src.core.config import LLMSettings, Settings
 
-    s = Settings()  # defaults: provider="ollama"
-    with patch("src.gloss.providers.ollama.openai.OpenAI", return_value=MagicMock()):
+    s = Settings(llm=LLMSettings(provider="ollama"))
+    with patch("src.llm.providers.ollama.openai.OpenAI", return_value=MagicMock()):
         p = make_provider(s)
     assert p.name == "ollama"

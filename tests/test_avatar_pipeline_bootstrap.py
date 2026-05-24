@@ -1,8 +1,9 @@
-"""Phase-1 bootstrap smoke tests for the interpreter_avatar pipeline.
+"""Bootstrap smoke tests for the interpreter_avatar pipeline.
 
-These guard the mode-toggle and the v5.0 schema so they don't regress as
-later phases land. They intentionally do NOT exercise audio, LLM, or
-mediapipe — those have their own tests in Phases 2–5.
+These guard the v5.0 schema, the config sections, and the pipeline
+skeleton so they don't regress as later phases land. They intentionally
+do NOT exercise audio, LLM, or mediapipe — those have their own tests
+in Phases 2–5.
 """
 
 from __future__ import annotations
@@ -22,21 +23,26 @@ from src.pipeline.models import (
 from src.pipeline.pipeline_avatar import InterpreterAvatarPipeline
 
 
-def test_default_mode_is_gloss():
-    """Default pipeline mode must remain genai_gloss so the working PoC keeps running."""
+def test_settings_load_with_avatar_sections():
+    """Settings expose audio/interpreter/avatar/pipeline sections with safe defaults."""
     reset_settings()
-    assert get_settings().pipeline.mode == "genai_gloss"
+    s = get_settings()
+    assert s.audio.asr_model in {"tiny", "base", "small", "medium"}
+    assert s.interpreter.max_chunk_chars > 0
+    assert s.avatar.rig == "vrm"
+    assert s.avatar.frame_rate > 0
+    assert s.pipeline.use_disk_cache is True
 
 
-def test_settings_accepts_interpreter_avatar_mode():
-    """The new mode is a valid Literal value on PipelineSettings."""
-    s = Settings.model_validate({"pipeline": {"mode": "interpreter_avatar"}})
-    assert s.pipeline.mode == "interpreter_avatar"
-
-
-def test_settings_rejects_unknown_mode():
-    with pytest.raises(Exception):
-        Settings.model_validate({"pipeline": {"mode": "bogus"}})
+def test_settings_tolerates_legacy_top_level_keys():
+    """Legacy top-level keys (e.g. test_videos) must not break loading."""
+    s = Settings.model_validate(
+        {
+            "test_videos": [{"id": "abc", "title": "x"}],
+            "avatar": {"frame_rate": 60},
+        }
+    )
+    assert s.avatar.frame_rate == 60
 
 
 def test_v5_schema_round_trips():
