@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ASL Overlay for YouTube",
-  "version": "1.0.0",
-  "description": "Displays real-time ASL sign language overlay on YouTube videos using locally-hosted word clips.",
+  "name": "GenASL — Interpreter Avatar for YouTube",
+  "version": "5.0.0",
+  "description": "Generates a 3D ASL interpreter avatar overlay on YouTube videos via a local AI pipeline (in build-out — see docs/plan/).",
   "permissions": ["storage", "activeTab"],
   "host_permissions": ["https://www.youtube.com/*", "http://127.0.0.1:8794/*"],
   "icons": {
@@ -17,7 +17,6 @@
     {
       "matches": ["https://www.youtube.com/*"],
       "js": ["content.js"],
-      "css": ["overlay.css"],
       "run_at": "document_idle"
     }
   ],
