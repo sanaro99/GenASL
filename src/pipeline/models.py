@@ -221,6 +221,163 @@ class PlanInput(BaseModel):
     filtered: list[TranscriptSegment] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------------------
+# Schema 5.0 — interpreter_avatar mode (additive; v4.0 untouched)
+# ---------------------------------------------------------------------------
+
+class WordTiming(BaseModel):
+    word: str
+    start_ms: int
+    end_ms: int
+
+
+class ProsodyFrame(BaseModel):
+    """One frame of prosodic features (default stride 50 ms)."""
+
+    t_ms: int
+    f0_hz: float = 0.0        # 0 when unvoiced
+    rms: float = 0.0          # 0..1 normalized
+    voiced: bool = False
+
+
+class EmotionLabel(BaseModel):
+    start_ms: int
+    end_ms: int
+    label: str                # e.g. "neutral", "happy", "sad", "angry", "questioning"
+    intensity: float = 0.0    # 0..1
+
+
+class AudioAnalysis(BaseModel):
+    """Output of AudioAnalyzeStage."""
+
+    duration_ms: int
+    asr_words: list[WordTiming]
+    prosody: list[ProsodyFrame]
+    emotion: list[EmotionLabel]
+
+
+class InterpreterChunk(BaseModel):
+    """Output of SemanticChunkStage — a coherent unit fed to the interpreter LLM."""
+
+    chunk_id: str
+    start_ms: int
+    end_ms: int
+    text: str
+    dominant_emotion: str = "neutral"
+    emotion_intensity: float = 0.0
+    f0_range_hz: tuple[float, float] = (0.0, 0.0)
+    rms_mean: float = 0.0
+    speaking_rate_wps: float = 0.0   # words per second
+    ended_with_pause: bool = False
+
+
+class AslPlanSegment(BaseModel):
+    """Output of InterpreterPlanStage — what the 'brain' decides for one chunk."""
+
+    chunk_id: str
+    start_ms: int
+    end_ms: int
+    topic_comment: list[str] = Field(default_factory=list)
+    sign_sequence: list[str] = Field(default_factory=list)   # internal gloss tokens
+    nmm_intent: dict[str, float] = Field(default_factory=dict)
+    emphasis_signs: list[str] = Field(default_factory=list)
+    role_shifts: list[dict] = Field(default_factory=list)
+    notes: str = ""
+
+
+class MotionFrame(BaseModel):
+    """One VRM humanoid-bone pose sample. Quaternions are [x,y,z,w]."""
+
+    t_ms: int
+    bone_rotations: dict[str, list[float]] = Field(default_factory=dict)
+    position: list[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+
+
+class NmmFrame(BaseModel):
+    """One ARKit-style face blendshape sample. Weights are 0..1."""
+
+    t_ms: int
+    blendshapes: dict[str, float] = Field(default_factory=dict)
+
+
+class AvatarRenderPlan(BaseModel):
+    """Final output of the interpreter_avatar pipeline (consumed by three.js)."""
+
+    schema_version: Literal["5.0"] = "5.0"
+    run_id: str
+    video_id: str
+    generated_at: str
+    duration_ms: int
+    frame_rate: int = 30
+    motion: list[MotionFrame] = Field(default_factory=list)
+    nmm: list[NmmFrame] = Field(default_factory=list)
+    plan_segments: list[AslPlanSegment] = Field(default_factory=list)
+    # Optional debug payload (analysis traces); excluded from the
+    # extension response when set None to keep payload small.
+    debug: dict | None = None
+
+
+# Stage I/O wrappers for the avatar pipeline.
+
+class AudioIngestInput(BaseModel):
+    video_id: str
+
+
+class AudioIngestOutput(BaseModel):
+    audio_path: str        # repo-relative
+    duration_ms: int
+    sample_rate_hz: int
+
+
+class AudioAnalyzeInput(BaseModel):
+    audio_path: str
+    duration_ms: int
+
+
+class AudioAnalyzeOutput(BaseModel):
+    analysis: AudioAnalysis
+
+
+class SemanticChunkInput(BaseModel):
+    analysis: AudioAnalysis
+
+
+class SemanticChunkOutput(BaseModel):
+    chunks: list[InterpreterChunk]
+
+
+class InterpreterPlanInput(BaseModel):
+    chunks: list[InterpreterChunk]
+
+
+class InterpreterPlanOutput(BaseModel):
+    segments: list[AslPlanSegment]
+    provider: str
+    model: str
+
+
+class MotionSynthInput(BaseModel):
+    segments: list[AslPlanSegment]
+
+
+class MotionSynthOutput(BaseModel):
+    motion: list[MotionFrame]
+    nmm: list[NmmFrame]
+    duration_ms: int
+
+
+class AvatarTimelineInput(BaseModel):
+    run_id: str
+    video_id: str
+    motion: list[MotionFrame]
+    nmm: list[NmmFrame]
+    duration_ms: int
+    plan_segments: list[AslPlanSegment] = Field(default_factory=list)
+    analysis: AudioAnalysis | None = None     # included in debug if present
+    provider: str = ""
+    model: str = ""
+
+
 __all__ = [
     # helpers
     "ms_to_timecode",
@@ -228,13 +385,23 @@ __all__ = [
     "Timing", "WordClip", "ChainedClip",
     # segment lineage
     "TranscriptSegment", "GlossSegment", "LookedUpSegment", "ChainedSegment",
-    # render plan
+    # render plan (v4.0 — genai_gloss mode)
     "SegmentAction", "SegmentMatch", "PlanSegment", "AslOverlayEntry",
     "PipelineInfo", "Summary", "RenderPlan",
-    # stage I/O
+    # stage I/O (v4.0)
     "FetchInput", "FetchOutput",
     "TranslateInput", "TranslateOutput",
     "LookupInput", "LookupOutput",
     "ChainInput", "ChainOutput",
     "PlanInput",
+    # schema v5.0 — interpreter_avatar mode
+    "WordTiming", "ProsodyFrame", "EmotionLabel", "AudioAnalysis",
+    "InterpreterChunk", "AslPlanSegment",
+    "MotionFrame", "NmmFrame", "AvatarRenderPlan",
+    "AudioIngestInput", "AudioIngestOutput",
+    "AudioAnalyzeInput", "AudioAnalyzeOutput",
+    "SemanticChunkInput", "SemanticChunkOutput",
+    "InterpreterPlanInput", "InterpreterPlanOutput",
+    "MotionSynthInput", "MotionSynthOutput",
+    "AvatarTimelineInput",
 ]

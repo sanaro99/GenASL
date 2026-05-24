@@ -43,7 +43,11 @@ class LLMSettings(BaseModel):
     )
 
 
+PipelineMode = Literal["genai_gloss", "interpreter_avatar"]
+
+
 class PipelineSettings(BaseModel):
+    mode: PipelineMode = "genai_gloss"
     min_word_count: int = 3
     min_duration_ms: int = 2000
     batch_chunk_size: int = 10
@@ -54,6 +58,39 @@ class PipelineSettings(BaseModel):
 class CompositorSettings(BaseModel):
     pip_width_ratio: float = 0.25
     disclosure_label: str = "AI-generated ASL overlay (POC)"
+
+
+class AudioSettings(BaseModel):
+    """Audio analysis stage tunables (interpreter_avatar mode)."""
+
+    asr_model: str = "small"            # faster-whisper size: tiny | base | small | medium
+    asr_compute_type: str = "int8"      # int8 | int8_float16 | float16 | float32
+    asr_language: str = "en"
+    sample_rate_hz: int = 16000
+    vad_min_silence_ms: int = 500       # silence ≥ this is a chunk boundary
+    prosody_frame_ms: int = 50          # prosody frame stride
+    emotion_window_ms: int = 4000       # min text window the emotion classifier sees
+
+
+class InterpreterSettings(BaseModel):
+    """Interpreter-brain LLM stage tunables (interpreter_avatar mode)."""
+
+    max_chunk_chars: int = 240          # cap per interpreter call
+    min_chunk_chars: int = 20
+    temperature: float = 0.2            # low — we want structured plans
+    include_role_shifts: bool = True
+    include_classifiers: bool = True
+
+
+class AvatarSettings(BaseModel):
+    """3D avatar / motion synthesis tunables (interpreter_avatar mode)."""
+
+    rig: Literal["vrm"] = "vrm"
+    vrm_model_url: str = "https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb"
+    frame_rate: int = 30                # motion timeline fps
+    sign_default_duration_ms: int = 600 # fallback when pose library has no timing
+    transition_ms: int = 120            # spline transition length between signs
+    pip_width_ratio: float = 0.30       # frontend canvas width fraction
 
 
 class ApiSettings(BaseModel):
@@ -75,6 +112,10 @@ class PathsSettings(BaseModel):
     chained_clips: str = "assets/chained"
     words: str = "assets/words"
     transcripts: str = "transcripts"
+    # interpreter_avatar mode
+    audio_cache: str = "data/audio_cache"
+    pose_library: str = "assets/pose_library"
+    avatar_plans: str = "logs"
 
     # Tolerate dead-leg path entries (supported_set, faiss_index, …) during
     # the transition. Phase G removes them from config.yaml.
@@ -88,6 +129,9 @@ class Settings(BaseModel):
     api: ApiSettings = Field(default_factory=ApiSettings)
     build: BuildSettings = Field(default_factory=BuildSettings)
     paths: PathsSettings = Field(default_factory=PathsSettings)
+    audio: AudioSettings = Field(default_factory=AudioSettings)
+    interpreter: InterpreterSettings = Field(default_factory=InterpreterSettings)
+    avatar: AvatarSettings = Field(default_factory=AvatarSettings)
 
     # Tolerate top-level legacy sections (``matcher``, ``test_videos``, …).
     model_config = ConfigDict(extra="ignore")

@@ -14,7 +14,7 @@ llm:
   provider: "ollama"          # ollama | gemini | openai
 
   ollama:
-    model: "llama3.2"
+    model: "gemma3:4b"
     base_url: "http://localhost:11434/v1"
 
   gemini:
@@ -30,6 +30,39 @@ build:
   # Signer preference chain — try signer 9 first (91% keyword coverage,
   # consistent framing from asl5200), then 109, then 12, then any.
   preferred_signer_ids: [9, 109, 12]
+
+# --- Pipeline mode toggle ---
+# genai_gloss        — word-level WLASL clip stitching (the original pipeline)
+# interpreter_avatar — audio-driven 3D-avatar pipeline (Phases 2–7)
+pipeline:
+  mode: "genai_gloss"
+
+# --- interpreter_avatar mode: audio analysis ---
+audio:
+  asr_model: "small"          # tiny | base | small | medium
+  asr_compute_type: "int8"    # int8 keeps CPU inference fast
+  asr_language: "en"
+  vad_min_silence_ms: 500
+  prosody_frame_ms: 50
+  emotion_window_ms: 4000
+
+# --- interpreter_avatar mode: interpreter LLM ---
+interpreter:
+  max_chunk_chars: 240
+  min_chunk_chars: 20
+  temperature: 0.2
+  include_role_shifts: true
+  include_classifiers: true
+
+# --- interpreter_avatar mode: 3D avatar / motion ---
+avatar:
+  rig: "vrm"
+  # Free Ready Player Me model URL; override with your own RPM avatar URL.
+  vrm_model_url: "https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb"
+  frame_rate: 30
+  sign_default_duration_ms: 600
+  transition_ms: 120
+  pip_width_ratio: 0.30
 
 # --- BBC Learning English test videos (Easy English Conversations) ---
 test_videos:
