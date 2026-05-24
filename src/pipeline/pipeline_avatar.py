@@ -22,8 +22,16 @@ from src.pipeline.models import (
     AudioAnalyzeInput,
     AudioIngestInput,
     AvatarRenderPlan,
+    InterpreterPlanInput,
+    InterpreterPlanOutput,
+    SemanticChunkInput,
 )
-from src.pipeline.stages import AudioAnalyzeStage, AudioIngestStage
+from src.pipeline.stages import (
+    AudioAnalyzeStage,
+    AudioIngestStage,
+    InterpreterPlanStage,
+    SemanticChunkStage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +49,9 @@ class InterpreterAvatarPipeline:
         # Phase 2 — audio backbone:
         self.audio_ingest = AudioIngestStage(self.settings, cache_root)
         self.audio_analyze = AudioAnalyzeStage(self.settings, cache_root)
-        # Phase 3 — interpreter brain (semantic_chunk, interpreter)
+        # Phase 3 — interpreter brain:
+        self.semantic_chunk = SemanticChunkStage(self.settings, cache_root)
+        self.interpreter = InterpreterPlanStage(self.settings, cache_root)
         # Phase 5 — motion synthesis (motion_synth, avatar_timeline)
 
     def run_audio_only(

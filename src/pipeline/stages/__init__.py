@@ -8,6 +8,8 @@ and will be imported here as they arrive (see ``docs/plan/``).
 from src.pipeline.stages.audio_analyze import AudioAnalyzeStage
 from src.pipeline.stages.audio_ingest import AudioIngestStage
 from src.pipeline.stages.base import Stage, stable_hash
+from src.pipeline.stages.interpreter_plan import InterpreterPlanStage
+from src.pipeline.stages.semantic_chunk import SemanticChunkStage
 
 __all__ = [
     "Stage",
@@ -15,7 +17,9 @@ __all__ = [
     # Phase 2 — audio backbone
     "AudioIngestStage",
     "AudioAnalyzeStage",
+    # Phase 3 — interpreter brain
+    "SemanticChunkStage",
+    "InterpreterPlanStage",
     # Concrete stages added in later phases:
-    #   SemanticChunkStage, InterpreterPlanStage   (Phase 3)
     #   MotionSynthStage, AvatarTimelineStage      (Phase 5)
 ]
