@@ -1,4 +1,9 @@
-"""Download source YouTube video for overlay compositing."""
+"""Download the source YouTube video so the audio backbone can extract
+a 16 kHz mono WAV from it (Stage 1 of the interpreter_avatar pipeline).
+
+Used by :mod:`src.audio.extractor` (lands in Phase 2). Reuses the
+already-merged MP4 on disk when present so re-runs don't re-download.
+"""
 
 from __future__ import annotations
 
@@ -8,10 +13,11 @@ import subprocess
 import shutil
 from pathlib import Path
 
+from src.core.paths import ASSETS_DIR, PROJECT_ROOT
+
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_DOWNLOADS_DIR = _PROJECT_ROOT / "assets" / "downloads"
+_DOWNLOADS_DIR = ASSETS_DIR / "downloads"
 
 # yt-dlp writes intermediate fragments as `<id>.fNNN.<ext>` before merging
 # to `<id>.mp4`. Those fragments are audio-only or video-only and break
@@ -22,7 +28,7 @@ _VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov"}
 
 def _find_ytdlp() -> str:
     """Return the path to yt-dlp, preferring the venv copy."""
-    venv_path = _PROJECT_ROOT / ".venv" / "Scripts" / "yt-dlp.exe"
+    venv_path = PROJECT_ROOT / ".venv" / "Scripts" / "yt-dlp.exe"
     if venv_path.is_file():
         return str(venv_path)
     system_path = shutil.which("yt-dlp")
