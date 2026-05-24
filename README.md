@@ -153,7 +153,7 @@ that any contributor (human or AI) can pick up a phase cold:
 | Phase | What it delivers | Status |
 |---|---|---|
 | [1 — Bootstrap](docs/plan/phase-1-bootstrap.md) | Config sections, v5.0 schema, skeleton, mode toggle | **Done** |
-| [2 — Audio backbone](docs/plan/phase-2-audio-backbone.md) | Whisper + librosa + emotion → `AudioAnalysis` | Pending |
+| [2 — Audio backbone](docs/plan/phase-2-audio-backbone.md) | Whisper + librosa + emotion → `AudioAnalysis` | **Done** |
 | [3 — Interpreter brain](docs/plan/phase-3-interpreter-brain.md) | LLM persona producing `AslPlanSegment` | Pending |
 | [4 — Pose library](docs/plan/phase-4-pose-library.md) | Mediapipe → per-gloss joint-angle JSON | Pending |
 | [5 — Motion synthesis + NMM](docs/plan/phase-5-motion-synthesis.md) | Retrieve + spline + prosody-driven NMM | Pending |
