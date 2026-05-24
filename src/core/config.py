@@ -1,13 +1,12 @@
 """Typed application settings loaded from ``config.yaml``.
 
-All magic numbers that used to live as module-level constants in
-``run_pipeline.py``, ``server.py``, ``compositor.py``, etc. are absorbed
-here. Modules should call :func:`get_settings` rather than re-parsing the
-YAML file.
+All tuneables for the ``interpreter_avatar`` pipeline live here. Modules
+should call :func:`get_settings` rather than re-parsing the YAML file.
 
-API keys (e.g. ``GEMINI_API_KEY``) are intentionally *not* part of this
-model — they're resolved by each provider at construction time from the
-process environment so secrets never touch the typed config.
+API keys (e.g. ``GEMINI_API_KEY``, ``OPENAI_API_KEY``) are intentionally
+*not* part of this model — they're resolved by each provider at
+construction time from the process environment so secrets never touch
+the typed config.
 """
 
 from __future__ import annotations
@@ -20,13 +19,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.core.paths import CONFIG_YAML
 
 
+# ---------------------------------------------------------------------------
+# LLM provider
+# ---------------------------------------------------------------------------
+
 class LLMProviderCfg(BaseModel):
     model: str
     base_url: str | None = None
 
 
 class LLMSettings(BaseModel):
-    provider: Literal["ollama", "gemini", "openai"] = "ollama"
+    provider: Literal["ollama", "gemini", "openai"] = "gemini"
     ollama: LLMProviderCfg = Field(
         default_factory=lambda: LLMProviderCfg(
             model="llama3.2", base_url="http://localhost:11434/v1"
@@ -43,26 +46,22 @@ class LLMSettings(BaseModel):
     )
 
 
-PipelineMode = Literal["genai_gloss", "interpreter_avatar"]
-
+# ---------------------------------------------------------------------------
+# Pipeline (orchestrator-level)
+# ---------------------------------------------------------------------------
 
 class PipelineSettings(BaseModel):
-    mode: PipelineMode = "genai_gloss"
-    min_word_count: int = 3
-    min_duration_ms: int = 2000
-    batch_chunk_size: int = 10
-    pause_gap_s: float = 1.5
-    high_asl_ratio_warn: float = 0.90
+    """High-level pipeline tunables. Stage-specific tunables live under
+    ``audio:``, ``interpreter:``, ``avatar:``."""
+
+    use_disk_cache: bool = True
 
 
-class CompositorSettings(BaseModel):
-    pip_width_ratio: float = 0.25
-    disclosure_label: str = "AI-generated ASL overlay (POC)"
-
+# ---------------------------------------------------------------------------
+# Audio analysis (Stages 1–2)
+# ---------------------------------------------------------------------------
 
 class AudioSettings(BaseModel):
-    """Audio analysis stage tunables (interpreter_avatar mode)."""
-
     asr_model: str = "small"            # faster-whisper size: tiny | base | small | medium
     asr_compute_type: str = "int8"      # int8 | int8_float16 | float16 | float32
     asr_language: str = "en"
@@ -72,9 +71,11 @@ class AudioSettings(BaseModel):
     emotion_window_ms: int = 4000       # min text window the emotion classifier sees
 
 
-class InterpreterSettings(BaseModel):
-    """Interpreter-brain LLM stage tunables (interpreter_avatar mode)."""
+# ---------------------------------------------------------------------------
+# Interpreter LLM (Stages 3–4)
+# ---------------------------------------------------------------------------
 
+class InterpreterSettings(BaseModel):
     max_chunk_chars: int = 240          # cap per interpreter call
     min_chunk_chars: int = 20
     temperature: float = 0.2            # low — we want structured plans
@@ -82,9 +83,11 @@ class InterpreterSettings(BaseModel):
     include_classifiers: bool = True
 
 
-class AvatarSettings(BaseModel):
-    """3D avatar / motion synthesis tunables (interpreter_avatar mode)."""
+# ---------------------------------------------------------------------------
+# 3D avatar / motion synthesis (Stages 5–6)
+# ---------------------------------------------------------------------------
 
+class AvatarSettings(BaseModel):
     rig: Literal["vrm"] = "vrm"
     vrm_model_url: str = "https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb"
     frame_rate: int = 30                # motion timeline fps
@@ -93,47 +96,49 @@ class AvatarSettings(BaseModel):
     pip_width_ratio: float = 0.30       # frontend canvas width fraction
 
 
+# ---------------------------------------------------------------------------
+# API server
+# ---------------------------------------------------------------------------
+
 class ApiSettings(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8794
     response_cache_max: int = 500
 
 
-class BuildSettings(BaseModel):
-    preferred_signer_ids: list[int] = Field(default_factory=lambda: [9, 109, 12])
-
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
 
 class PathsSettings(BaseModel):
     """Repo-relative paths. Defaults are used when YAML omits the key."""
 
-    word_manifest: str = "assets/word_manifest.json"
     logs: str = "logs"
     cache_dir: str = "data/cache"
-    chained_clips: str = "assets/chained"
-    words: str = "assets/words"
-    transcripts: str = "transcripts"
-    # interpreter_avatar mode
     audio_cache: str = "data/audio_cache"
     pose_library: str = "assets/pose_library"
     avatar_plans: str = "logs"
+    # Source WLASL clip directory used only by scripts/build_pose_library.py
+    wlasl_clips: str = "assets/wlasl_clips"
 
-    # Tolerate dead-leg path entries (supported_set, faiss_index, …) during
-    # the transition. Phase G removes them from config.yaml.
+    # Tolerate legacy path entries during the transition.
     model_config = ConfigDict(extra="ignore")
 
+
+# ---------------------------------------------------------------------------
+# Root
+# ---------------------------------------------------------------------------
 
 class Settings(BaseModel):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
-    compositor: CompositorSettings = Field(default_factory=CompositorSettings)
-    api: ApiSettings = Field(default_factory=ApiSettings)
-    build: BuildSettings = Field(default_factory=BuildSettings)
-    paths: PathsSettings = Field(default_factory=PathsSettings)
     audio: AudioSettings = Field(default_factory=AudioSettings)
     interpreter: InterpreterSettings = Field(default_factory=InterpreterSettings)
     avatar: AvatarSettings = Field(default_factory=AvatarSettings)
+    api: ApiSettings = Field(default_factory=ApiSettings)
+    paths: PathsSettings = Field(default_factory=PathsSettings)
 
-    # Tolerate top-level legacy sections (``matcher``, ``test_videos``, …).
+    # Tolerate top-level legacy sections (``test_videos``, etc.).
     model_config = ConfigDict(extra="ignore")
 
 

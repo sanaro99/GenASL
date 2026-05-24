@@ -1,14 +1,15 @@
 """Interpreter-avatar pipeline orchestrator (schema v5.0).
 
-Mirrors :class:`src.pipeline.pipeline.Pipeline` but for the
-``interpreter_avatar`` mode: audio in → analyse → chunk → interpret →
-synthesise motion → emit an :class:`AvatarRenderPlan` for the three.js
-frontend.
+Audio in → analyse (ASR + prosody + emotion) → chunk semantically →
+interpret with an LLM "interpreter brain" → synthesise motion + NMMs →
+emit an :class:`AvatarRenderPlan` for the three.js frontend.
 
-This module is a *skeleton* — concrete stages land in subsequent phases.
+This module is a *skeleton* — concrete stages land in Phases 2–5.
 Until then, :meth:`InterpreterAvatarPipeline.run` raises
 ``NotImplementedError`` so a mis-routed call fails loudly rather than
 silently returning an empty plan.
+
+See ``docs/plan/`` for the per-phase implementation roadmap.
 """
 
 from __future__ import annotations
@@ -48,6 +49,6 @@ class InterpreterAvatarPipeline:
     def run(self, video_id: str, *, use_cache: bool = True) -> AvatarRenderPlan:
         raise NotImplementedError(
             "InterpreterAvatarPipeline is a skeleton. "
-            "Stage wiring lands in Phases 2–5; "
-            "use pipeline.mode='genai_gloss' until then."
+            "Stage wiring lands in Phases 2–5 — see docs/plan/ "
+            "for the implementation roadmap."
         )
