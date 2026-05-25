@@ -16,9 +16,11 @@
                                     │
 [4] InterpreterPlanStage     LLM persona → AslPlanSegment[]  (the "brain")
                                     │
-[5] MotionSynthStage         retrieve poses + spline + NMM-from-prosody
+[5] MotionSynthStage         retrieve phrase-level Deaf-signed clip
+                             (OpenASL → ASL Citizen → WLASL fallback)
+                             + spline + NMM (retrieved face when avail.)
                                     │
-[6] AvatarTimelineStage      bundle → AvatarRenderPlan v5.0
+[6] AvatarTimelineStage      bundle → AvatarRenderPlan v5.1
                                     │
                           (JSON sent to extension; three.js plays)
 ```
@@ -35,8 +37,8 @@ caches its output to disk by a fingerprint of (input + relevant settings).
 | 1 — Bootstrap | Config, schema, skeleton, mode toggle | n/a — foundation |
 | 2 — Audio backbone | Stages 1, 2 (`src/audio/`) | `src/audio/source_video.py` already in place |
 | 3 — Interpreter brain | Stages 3, 4 (`src/interpreter/`) | `src/llm/providers/` for the LLM call |
-| 4 — Pose library | `assets/pose_library/` + `scripts/build_pose_library.py` | `assets/wlasl_clips/`, `assets/word_manifest.json` |
-| 5 — Motion synthesis + NMM | Stages 5, 6 (`src/avatar/`) | `assets/pose_library/`, `AudioAnalysis` prosody |
+| 4 — Corpus retrieval | `assets/corpus/openasl{,_poses,_manifest.json,.faiss}` + `src/avatar/{retrieval,pose_extractor,vrm_retarget}.py` + `scripts/{fetch_openasl,build_corpus_index,build_pose_library}.py` | OpenASL release, ASL Citizen, WLASL (fallback only) |
+| 5 — Motion synthesis + NMM | Stages 5, 6 (`src/avatar/{motion_synth,nmm,retrieval_chain,vrm_schema}.py`) | Phase 4 corpus + indexes, `AudioAnalysis` prosody |
 | 6 — Chrome extension VRM | `chrome-extension/avatar.js`, vendored three.js + three-vrm | `AvatarRenderPlan` schema, `/asl/avatar` endpoint |
 | 7 — API + end-to-end | `/asl/avatar` real implementation, demo polish | All prior phases |
 
@@ -59,10 +61,13 @@ src/
 │   ├── prompt.py                      # Phase 3 — interpreter persona prompt
 │   └── planner.py                     # Phase 3 — LLM call → AslPlanSegment
 ├── avatar/
-│   ├── pose_library.py                # Phase 5 — loader for built JSON
-│   ├── pose_extractor.py              # Phase 4 — mediapipe → joint angles
-│   ├── motion_synth.py                # Phase 5 — retrieve + interpolate
-│   ├── nmm.py                         # Phase 5 — prosody → blendshapes
+│   ├── retrieval.py                   # Phase 4 — FAISS + sentence-transformer query
+│   ├── retrieval_chain.py             # Phase 5 — openasl→aslcitizen→wlasl tier picker
+│   ├── pose_extractor.py              # Phase 4 — mediapipe → MotionFrame stream
+│   ├── vrm_retarget.py                # Phase 4 — landmarks → VRM bone quats
+│   ├── pose_library.py                # Phase 4 (fallback) — WLASL per-gloss JSON loader
+│   ├── motion_synth.py                # Phase 5 — tiered retrieval + spline + fidelity tag
+│   ├── nmm.py                         # Phase 5 — retrieved face when avail., else rules
 │   └── vrm_schema.py                  # Phase 5 — JSON schema docs for three.js
 ├── pipeline/
 │   ├── models.py                      # v5.0 (Phase 1)
@@ -85,22 +90,36 @@ chrome-extension/
 └── vendor/three-vrm.min.js            # Phase 6
 
 scripts/
-└── build_pose_library.py              # Phase 4
+├── fetch_openasl.py                   # Phase 4 — corpus download + manifest
+├── build_corpus_index.py              # Phase 4 — embeddings + per-clip poses
+└── build_pose_library.py              # Phase 4 — WLASL fallback (top-500 only)
 
 assets/
-├── pose_library/<gloss>.json          # Phase 4 output
-└── wlasl_clips/                       # Phase 4 input
+├── corpus/
+│   ├── openasl_manifest.json          # Phase 4 (tracked)
+│   ├── openasl.faiss                  # Phase 4 (tracked, ~tens of MB)
+│   ├── openasl/<clip_id>.mp4          # Phase 4 (NOT tracked — gitignored)
+│   └── openasl_poses/<clip_id>.json   # Phase 4 (NOT tracked — gitignored)
+├── pose_library/<gloss>.json          # Phase 4 fallback output
+└── wlasl_clips/                       # WLASL inputs (fallback path only)
 ```
 
 ---
 
 ## The single most important invariant
 
-The user's spec, repeated here so no contributor forgets:
+The user's spec, tightened on 2026-05-24 to close a loophole: the
+previous wording allowed "per-gloss WLASL clip stitching" to count
+as retrieval, which is structurally Signed English, not ASL.
 
-> **Every hand pose comes from a Deaf-signer recording.** The AI orchestrates
-> known-good primitives; it never generates a sign de novo. Pure neural
-> generation only fills transitions and the NMM channel.
+> **Every output segment's motion comes from a Deaf-signer recording.**
+> Default tier: a continuous Deaf-signed clip retrieved at phrase
+> level (OpenASL / ASL Citizen). Fallback tier: per-gloss WLASL
+> stitching, always tagged `fidelity="stitched"` (or `"degraded"` when
+> > 50% of glosses are missing) so the consumer can show a fidelity
+> badge in dev mode. The AI orchestrates known-good primitives; it
+> never generates a sign de novo. Pure neural generation only fills
+> *transitions* and *NMM augmentation on top of* the retrieved face.
 
-If a phase implementation makes this invariant impossible to verify after
-the fact, the phase plan is wrong; flag it before shipping.
+If a phase implementation makes this invariant impossible to verify
+after the fact, the phase plan is wrong; flag it before shipping.

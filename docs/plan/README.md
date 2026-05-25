@@ -26,12 +26,13 @@ top-to-bottom, and ship the phase without re-deriving context.
 | [1](phase-1-bootstrap.md) | Bootstrap — config + schema + skeleton | **Done** | ½ day | `src/{core,pipeline}` |
 | [2](phase-2-audio-backbone.md) | Audio backbone | **Done** | ~1 week | `src/audio/`, 2 stages |
 | [3](phase-3-interpreter-brain.md) | Interpreter brain | **Done** | ~1 week | `src/interpreter/`, 2 stages |
-| [4](phase-4-pose-library.md) | Pose library (offline asset build) | Pending | ~3 days | `assets/pose_library/`, 1 script |
-| [5](phase-5-motion-synthesis.md) | Motion synthesis + NMM | Pending | ~1 week | `src/avatar/`, 2 stages |
+| [4](phase-4-corpus-retrieval.md) | Corpus ingest + phrase retrieval index (OpenASL + ASL Citizen; WLASL as fallback) | Pending | ~3 weeks | `assets/corpus/`, `src/avatar/{retrieval,pose_extractor,vrm_retarget}.py`, 2 scripts |
+| [5](phase-5-motion-synthesis.md) | Motion synthesis (retrieval-driven) + NMM | Pending | ~2 weeks | `src/avatar/`, 2 stages |
 | [6](phase-6-chrome-extension-vrm.md) | Chrome extension VRM frontend | Pending | ~1 week | `chrome-extension/avatar.js`, content.js |
 | [7](phase-7-api-end-to-end.md) | API endpoint + end-to-end demo | Pending | ~3 days | `src/api/server.py`, demo polish |
 
-Total estimated effort: **4–6 focused weeks of solo work**.
+Total estimated effort: **6–8 focused weeks of solo work** under the
+revised Phase 4/5 (corpus retrieval) plan.
 
 ---
 
