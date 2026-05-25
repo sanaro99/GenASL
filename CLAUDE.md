@@ -42,10 +42,15 @@ Violating them invalidates the work.
    **never surfaced to the user**. The Chrome extension never shows
    gloss text. We do not ship the old WLASL clip-stitching pipeline.
 
-2. **Retrieval-augmented, not pure generative.** Every hand pose in the
-   final motion stream traces back to a Deaf-signer keyframe in
-   `assets/pose_library/`. AI orchestrates known-good primitives;
-   generative steps only fill *transitions* and the *NMM channel*.
+2. **Phrase-level retrieval-augmented, not pure generative.** Tightened
+   on 2026-05-24: every output segment's motion comes from a Deaf-signer
+   recording, *and the default tier is a continuous clip retrieved at
+   phrase level* from `assets/corpus/openasl/` (with ASL Citizen as a
+   lexical secondary). Per-gloss WLASL stitching from
+   `assets/pose_library/` is the last-resort fallback, always tagged
+   `fidelity="stitched"` (or `"degraded"` if > 50% of glosses miss).
+   AI orchestrates known-good primitives; generative steps only fill
+   *transitions* and *NMM augmentation on top of* the retrieved face.
    If a phase implementation makes this invariant un-verifiable after
    the fact, the phase plan is wrong — flag it before shipping.
 
@@ -61,7 +66,9 @@ Violating them invalidates the work.
 
 5. **Pydantic models, not dicts, between stages.** The schema in
    `src/pipeline/models.py` is authoritative; new fields land there.
-   Bump `schema_version` only on a breaking change to `AvatarRenderPlan`.
+   Bump `schema_version` only on a breaking change to `AvatarRenderPlan`
+   (current target: `5.1` once Phase 5 lands with the retrieval
+   metadata fields).
    
 6. **Market expansion, not substitution.** GenASL serves the underserved — content that today has no ASL at all because human interpretation isn't economically viable for it. Human interpreters remain the gold standard for live, high-stakes, nuanced settings, and broader ambient ASL exposure created by GenASL increases demand and visibility for their work. Public-facing copy must reflect this: we expand the pie, we don't take a slice from interpreters.
 
@@ -75,6 +82,9 @@ src/
 ├── audio/
 │   ├── source_video.py         # yt-dlp source MP4 (Stage 1 input)
 │   └── ...                     # Phase 2 lands extractor, asr, prosody, emotion, analyzer
+├── interpreter/                # Phase 3 — chunker, prompt, planner
+├── avatar/                     # Phase 4–5 — retrieval, pose extractor, vrm retarget,
+│                               # motion synth, NMM, vrm schema
 ├── core/
 │   ├── config.py               # Pydantic Settings; get_settings() singleton
 │   ├── paths.py                # all filesystem paths
@@ -177,8 +187,8 @@ never from config.
 | 1 — Bootstrap | **Done** |
 | 2 — Audio backbone | **Done** |
 | 3 — Interpreter brain | **Done** |
-| 4 — Pose library | Pending |
-| 5 — Motion synthesis + NMM | Pending |
+| 4 — Corpus retrieval (OpenASL + ASL Citizen; WLASL fallback) | Pending |
+| 5 — Motion synthesis (retrieval-driven) + NMM | Pending |
 | 6 — Chrome extension VRM | Pending |
 | 7 — API + end-to-end | Pending |
 

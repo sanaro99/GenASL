@@ -19,18 +19,27 @@ interpreter works:
 2. **Plan** — feed the analysed audio (text + prosody + emotion) to a
    "interpreter brain" LLM that produces a structured ASL plan (manual
    sign sequence + non-manual marker intent + emphasis + grammar).
-3. **Sign** — retrieve real Deaf-signer motion clips for each sign in the
-   plan, interpolate smoothly between them, and generate a parallel
-   facial-blendshape track from prosody.
+3. **Sign** — for each plan segment, *retrieve a continuous Deaf-signed
+   clip* whose caption matches the segment's text (OpenASL FAISS index,
+   with ASL Citizen as a lexical secondary and WLASL gloss stitching as
+   a last-resort fallback). Retarget the clip's pose onto the VRM rig
+   and, when the retrieved clip carries face landmarks, use them as the
+   base NMM track — augmenting only with emphasis from prosody.
 4. **Render** — return a JSON timeline; the extension drives a Ready Player
    Me VRM avatar in a PiP canvas, synced to the host `<video>` element.
 
-The pipeline is **retrieval-augmented**: hand poses come from a curated
-library extracted from Deaf-signer clips, not from a pure-generative model.
-This is the most important architectural choice — see
+The pipeline is **retrieval-augmented at phrase level** as of 2026-05-24
+— motion comes from continuous Deaf-signed clips selected by semantic
+similarity to each plan segment, not from per-gloss WLASL stitching.
+The earlier per-gloss path is retained as the last-resort fallback
+when no phrase-level or lexical retrieval hit is above threshold; any
+fallback segment is tagged `fidelity="stitched"` (or `"degraded"`) so
+the consumer can render a fidelity badge in dev mode. This is the
+most important architectural choice — see
 [`business/feasibility-study/01-technology-feasibility.md`](../business/feasibility-study/01-technology-feasibility.md)
-§ 1.5 for the rationale (determinism, auditability, bounded failure modes,
-Deaf-community acceptance).
+§ 1.5 for the rationale (determinism, auditability, bounded failure
+modes, Deaf-community acceptance), and the approved 2026-05-24
+planning memo for the per-gloss → phrase-level pivot.
 
 ---
 
@@ -55,13 +64,15 @@ flowchart TB
     S2["2 AudioAnalyze<br/>faster-whisper + librosa + emotion"]
     S3["3 SemanticChunk<br/>VAD pauses + clause punctuation"]
     S4["4 InterpreterPlan<br/>LLM persona = interpreter brain"]
-    S5["5 MotionSynth<br/>retrieve + spline-interp + NMM"]
-    S6["6 AvatarTimeline<br/>emit AvatarRenderPlan v5.0"]
+    S5["5 MotionSynth<br/>phrase retrieve → lexical → WLASL<br/>+ NMM (retrieved face when avail.)"]
+    S6["6 AvatarTimeline<br/>emit AvatarRenderPlan v5.1"]
     S1 --> S2 --> S3 --> S4 --> S5 --> S6
   end
 
   subgraph DATA["Data / assets"]
-    POSE["assets/pose_library/<br/>per-gloss joint-angle JSON"]
+    OASL["assets/corpus/openasl/<br/>continuous Deaf-signed clips +<br/>FAISS caption index + per-clip poses"]
+    CITIZEN["assets/corpus/aslcitizen/<br/>per-gloss lexical fallback"]
+    POSE["assets/pose_library/<br/>WLASL per-gloss JSON (last-resort)"]
     WLASL["assets/wlasl_clips/<br/>Deaf-signer source clips"]
     AUDIO["data/audio_cache/<br/>extracted WAVs"]
     CACHE["data/cache/<br/>per-stage JSON"]
@@ -71,7 +82,9 @@ flowchart TB
   CS -- "video_id" --> EP
   EP --> PIPE --> S1
   S1 -.uses.-> AUDIO
-  S5 -.uses.-> POSE
+  S5 -.primary.-> OASL
+  S5 -.secondary.-> CITIZEN
+  S5 -.fallback.-> POSE
   POSE -.built once from.-> WLASL
   STAGES -.shared.-> CACHE
   S6 -- "AvatarRenderPlan JSON" --> EP
@@ -93,8 +106,8 @@ under `data/cache/<stage_name>/<key>.json`, so reruns hit disk.
 | 2 | `AudioAnalyzeStage` | `AudioAnalyzeInput(audio_path, duration_ms)` | `AudioAnalyzeOutput(analysis: AudioAnalysis)` | faster-whisper ASR (word-level timestamps), librosa prosody, LLM-from-text emotion. Run as 3 parallel threads. | Phase 2 |
 | 3 | `SemanticChunkStage` | `SemanticChunkInput(analysis)` | `SemanticChunkOutput(chunks: list[InterpreterChunk])` | Combine VAD silences ≥ 500 ms with clause-boundary punctuation to cut audio into coherent semantic units (target 20–240 chars each) | Phase 3 |
 | 4 | `InterpreterPlanStage` | `InterpreterPlanInput(chunks)` | `InterpreterPlanOutput(segments: list[AslPlanSegment], provider, model)` | LLM persona: "you are an ASL interpreter; given this text + emotion + emphasis, produce a structured plan with sign sequence, topic-comment grammar, NMM intent, emphasis flags." Calls one of Ollama/Gemini/OpenAI via `src.llm.providers.make_provider`. | Phase 3 |
-| 5 | `MotionSynthStage` | `MotionSynthInput(segments)` | `MotionSynthOutput(motion: list[MotionFrame], nmm: list[NmmFrame], duration_ms)` | For each sign in the plan: retrieve keyframes from `assets/pose_library/`. Spline-interpolate between signs (default 120 ms transitions). Generate face blendshapes from prosody + `nmm_intent` (brow raise for yes-no questions, head tilt for negation, mouth shape for adverbials, intensity for emphasis). | Phase 5 |
-| 6 | `AvatarTimelineStage` | `AvatarTimelineInput(motion, nmm, plan_segments, …)` | `AvatarRenderPlan` v5.0 | Bundle motion + NMM + plan + optional debug payload, stamp run_id + generated_at, return. | Phase 5 |
+| 5 | `MotionSynthStage` | `MotionSynthInput(segments)` | `MotionSynthOutput(motion: list[MotionFrame], nmm: list[NmmFrame], duration_ms, annotated_segments)` | Per segment: query the OpenASL FAISS index; if `similarity ≥ phrase_threshold` use the retrieved clip's pose stream (and its face landmarks as the NMM base). Else try the ASL Citizen lexical index per gloss. Else fall back to WLASL gloss stitching with spline transitions. Tag each segment `fidelity = "retrieval"|"lexical"|"stitched"|"degraded"`. | Phase 5 |
+| 6 | `AvatarTimelineStage` | `AvatarTimelineInput(motion, nmm, plan_segments, …)` | `AvatarRenderPlan` v5.1 | Bundle motion + NMM + annotated plan segments + optional debug payload, stamp run_id + generated_at, return. | Phase 5 |
 
 ### Data shapes (excerpt — full schema in [`src/pipeline/models.py`](../src/pipeline/models.py))
 
@@ -115,14 +128,19 @@ class AslPlanSegment:
     chunk_id: str; start_ms, end_ms: int
     topic_comment: list[str]           # e.g. ["TOPIC: SCHOOL", "COMMENT: GO YESTERDAY"]
     sign_sequence: list[str]            # internal gloss tokens, never user-facing
+    query_text: str                     # phrase-level retrieval query (Phase 5 fills if absent)
     nmm_intent: dict[str, float]        # e.g. {"brow_raise": 0.8, "head_tilt_left": 0.4}
     emphasis_signs: list[str]; role_shifts: list[dict]; notes: str
+    # Phase 5 populates these:
+    retrieved_clip_id: str | None
+    retrieval_similarity: float | None
+    fidelity: Literal["retrieval", "lexical", "stitched", "degraded"] | None
 
 class MotionFrame: t_ms: int; bone_rotations: dict[str, list[float]]; position
 class NmmFrame:    t_ms: int; blendshapes: dict[str, float]                   # ARKit names
 
 class AvatarRenderPlan:
-    schema_version: "5.0"; run_id; video_id; generated_at: str
+    schema_version: "5.1"; run_id; video_id; generated_at: str
     duration_ms; frame_rate: int
     motion: list[MotionFrame]; nmm: list[NmmFrame]
     plan_segments: list[AslPlanSegment]
@@ -141,7 +159,11 @@ class AvatarRenderPlan:
 | Emotion | LLM-from-text-and-prosody-summary | Avoids a second ~1 GB HF audio model; cheaper API call instead |
 | Interpreter LLM | Gemini 2.0 Flash / OpenAI / Ollama | Multi-provider abstraction in `src/llm/providers/` |
 | Pose extraction | `mediapipe` (Holistic) | Tracks pose + hands + face from RGB; no MoCap rig needed |
-| Motion library | JSON keyframes per gloss | Diffable, audit-friendly, swappable per signer |
+| Primary retrieval corpus | OpenASL (~288 hrs, English captions) | Continuous Deaf signing with caption alignment; permissive license |
+| Secondary lexical index | ASL Citizen (~83 hrs, gloss + phonological) | Disambiguates per-token vocabulary when phrase retrieval misses |
+| Fallback library | WLASL (~2 k glosses, isolated signs) | Last-resort per-gloss stitching, used only when both retrieval indexes miss |
+| Embedding model | `sentence-transformers/all-MiniLM-L6-v2` | Cheap (384-d), good enough for caption similarity |
+| Vector index | FAISS (`IndexFlatIP` over normalized vectors) | RAM-resident; trivial to rebuild |
 | Avatar rig | Ready Player Me VRM | Free, web-friendly, ARKit blendshape support |
 | Renderer | three.js + @pixiv/three-vrm in browser | Real-time, no server GPU, follows video state |
 | Pipeline | Per-stage disk-cached Pydantic stages | Reruns are JSON reads; fingerprint = settings + input hash |
@@ -159,6 +181,7 @@ All settings live in `src/core/config.py` (Pydantic) with overrides in
 | `audio` | Whisper model size + compute type, language, VAD silence threshold, prosody stride, emotion window |
 | `interpreter` | Per-call char caps, LLM temperature, optional grammar features (role shifts, classifiers) |
 | `avatar` | Rig (vrm), avatar URL, frame rate, default sign duration, transition length, PiP width |
+| `retrieval` | Embedding model name, phrase/lexical similarity thresholds, primary + secondary corpus paths |
 | `api` | Host, port, response cache size |
 | `paths` | Logs, caches, pose library, source clips |
 
@@ -202,7 +225,8 @@ Once Phase 6 lands, the lifecycle is:
 | Photorealistic avatar (Gaussian splats, MetaHuman) | Out — RPM VRM is enough for a prototype; photorealism without Deaf-community testing is a reputational risk |
 | Trained motion-transition model | Out for v1 — spline interpolation is the simple baseline; a learned model can replace it once we have user feedback |
 | Live broadcast latency optimisation | Out — prototype targets offline / on-demand YouTube content |
-| Long-tail vocabulary beyond the WLASL library | Out — Phase 4 caps at the WLASL ~2 k glosses; missing signs degrade gracefully (skipped with a debug note) |
+| Long-tail vocabulary beyond the indexed corpora | Out — Phase 4 caps at OpenASL (~288 hrs) + ASL Citizen (~83 hrs) for retrieval, with WLASL (~2 k glosses) as a last-resort stitching fallback. Out-of-corpus content yields `fidelity="degraded"` segments rather than a crash. |
+| Classifier-heavy narrative ASL | Out for v1 — the corpus covers expository content (news, education) far better than narrative; tag and degrade rather than fabricate. |
 | Multi-signer / identity selection | Out — single avatar v1; identity selection added once corpus expands |
 | Deaf-community pilot / quality evaluation | Out of the *code* scope, but **must precede any external claim of fidelity** — see `business/feasibility-study/05-feasibility-verdict.md` § 5.2 |
 
