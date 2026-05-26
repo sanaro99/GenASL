@@ -1,0 +1,62 @@
+[
+  {
+    "id": "wh_question_1",
+    "category": "wh-question",
+    "text": "where is the library?",
+    "expected_keywords": ["where", "library", "find", "location"]
+  },
+  {
+    "id": "yes_no_question_1",
+    "category": "yes/no question",
+    "text": "are you coming to the meeting tonight?",
+    "expected_keywords": ["meeting", "tonight", "coming", "attend"]
+  },
+  {
+    "id": "negation_1",
+    "category": "negation",
+    "text": "I do not agree with that decision.",
+    "expected_keywords": ["disagree", "not", "decision", "no"]
+  },
+  {
+    "id": "topic_comment_1",
+    "category": "topic-comment",
+    "text": "as for the homework, it is due on friday.",
+    "expected_keywords": ["homework", "friday", "due", "assignment"]
+  },
+  {
+    "id": "classifier_predicate_1",
+    "category": "classifier predicate",
+    "text": "the car drove around the corner slowly.",
+    "expected_keywords": ["car", "drove", "around", "corner"]
+  },
+  {
+    "id": "role_shift_1",
+    "category": "role shift",
+    "text": "she said, I will be late tomorrow.",
+    "expected_keywords": ["said", "late", "tomorrow", "told"]
+  },
+  {
+    "id": "time_anchor_1",
+    "category": "time anchor",
+    "text": "the appointment is next wednesday at three pm.",
+    "expected_keywords": ["wednesday", "three", "appointment", "schedule"]
+  },
+  {
+    "id": "numeric_1",
+    "category": "numeric",
+    "text": "there are twenty five students in the class.",
+    "expected_keywords": ["twenty", "five", "students", "class"]
+  },
+  {
+    "id": "neutral_declarative_1",
+    "category": "neutral declarative",
+    "text": "the weather is nice today.",
+    "expected_keywords": ["weather", "today", "nice", "warm"]
+  },
+  {
+    "id": "neutral_declarative_2",
+    "category": "neutral declarative",
+    "text": "thank you for your help with the project.",
+    "expected_keywords": ["thank", "help", "project", "appreciate"]
+  }
+]
