@@ -97,6 +97,32 @@ class AvatarSettings(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Retrieval (Phase 4) — phrase-level corpus retrieval + lexical fallback
+# ---------------------------------------------------------------------------
+
+class RetrievalSettings(BaseModel):
+    """Tunables for phrase-level + lexical retrieval over Deaf-signed corpora."""
+
+    # SentenceTransformer model name — must match between build and query.
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Above this cosine similarity, a primary (phrase-level) hit is accepted.
+    phrase_threshold: float = 0.55
+    # Above this similarity, a per-token secondary (lexical, ASL Citizen) hit
+    # is accepted in the fallback path.
+    lexical_threshold: float = 0.70
+    # Maximum drift (×) between retrieved-clip duration and segment window
+    # before a candidate is rejected — keeps the avatar from time-scaling
+    # absurdly long or short clips into the chunk.
+    max_duration_drift: float = 0.40
+    # OpenASL clip duration cap — anything longer is discarded at fetch time
+    # so we don't waste disk on full lectures.
+    max_clip_duration_ms: int = 12000
+    # Corpus directory names (relative to assets/corpus/).
+    primary_corpus: str = "openasl"
+    secondary_corpus: str = "aslcitizen"
+
+
+# ---------------------------------------------------------------------------
 # API server
 # ---------------------------------------------------------------------------
 
@@ -120,6 +146,10 @@ class PathsSettings(BaseModel):
     avatar_plans: str = "logs"
     # Source WLASL clip directory used only by scripts/build_pose_library.py
     wlasl_clips: str = "assets/wlasl_clips"
+    # Phase 4 corpus root — holds <name>/ (video bytes, gitignored),
+    # <name>_poses/ (per-clip JSON, gitignored), <name>_manifest.json
+    # (tracked), and <name>.faiss (tracked).
+    corpus_root: str = "assets/corpus"
 
     # Tolerate legacy path entries during the transition.
     model_config = ConfigDict(extra="ignore")
@@ -135,6 +165,7 @@ class Settings(BaseModel):
     audio: AudioSettings = Field(default_factory=AudioSettings)
     interpreter: InterpreterSettings = Field(default_factory=InterpreterSettings)
     avatar: AvatarSettings = Field(default_factory=AvatarSettings)
+    retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
     paths: PathsSettings = Field(default_factory=PathsSettings)
 

@@ -18,9 +18,16 @@ librosa>=0.10
 soundfile>=0.12
 numpy
 
-# --- Phase 4 (pose library, offline) — add when running build_pose_library.py ---
-# mediapipe>=0.10
-# opencv-python
+# --- Phase 4 (corpus retrieval + pose extraction, offline) ---
+# Needed by scripts/fetch_openasl.py, scripts/build_corpus_index.py,
+# scripts/build_pose_library.py, and the src/avatar/{pose_extractor,
+# vrm_retarget,retrieval}.py runtime modules.
+mediapipe>=0.10
+opencv-python>=4.8
+sentence-transformers>=2.7
+faiss-cpu>=1.7
+scipy>=1.11
+tqdm>=4.66
 
 # Dev / tests
 pytest==8.3.5
