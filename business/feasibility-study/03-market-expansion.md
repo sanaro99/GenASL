@@ -5,9 +5,9 @@
 
 ---
 
-## 3.1 — The original analysis under-counted demand
+## 3.1 — Why a fixed-market view under-counts demand
 
-The v1 market analysis ([../02-market-analysis.md](../02-market-analysis.md)) treated the ASL market as fixed: ~500k–1M primary users, ~6.4M sign-knowledgeable adults, ~250k–500k active learners/year. That framing is **wrong if a high-quality generative ASL layer changes the cost of producing ASL content from $300–800/min (human interpreter) to $0.10–$0.40/min (proposed system).**
+A naïve analysis treats the ASL market as fixed: ~500k–1M primary users, ~6.4–7.0M sign-knowledgeable adults, ~250k–500k active learners/year. That framing is **wrong if a high-quality retrieval-augmented ASL layer changes the cost of producing ASL content from $300–800/min (human interpreter) to $0.10–$0.40/min (this system).** The plan's [market analysis](../02-market-analysis.md) folds the induced-demand conclusion into its sizing; this appendix shows the full model.
 
 When a complement becomes ~1,000× cheaper, the market for the primary good usually grows. This is the same effect that:
 
@@ -88,7 +88,7 @@ This is where the founder should be most careful. **The market grows, but most o
 | Growth segment | User-count growth | Revenue growth (to GenASL) |
 |---|---|---|
 | Deaf primary users (Channel A) | Modest absolute, high engagement | $0 direct — they don't pay; their *engagement* is what platforms pay GenASL to provide |
-| Hearing ASL learners (Channel B) | Large absolute | Modest unless we monetize learners directly (the v1 thesis) |
+| Hearing ASL learners (Channel B) | Large absolute | Modest unless we monetize learners directly (a consumer-learner model — not the chosen path) |
 | New ASL content (Channel C) | Massive — orders of magnitude | Direct: per-minute or per-stream pricing to platforms producing the content |
 
 **Implication:** The induced demand argument *supports* the platform-pays B2B model but does *not* support a high-ARPU consumer model. Most of the *new value* flows to platforms (more engaged audiences, ADA/EAA risk reduction, brand halo) and to society (more accessible content). GenASL captures the slice that platforms re-allocate from their accessibility budget — meaningful, but a fraction of total induced value.
@@ -99,7 +99,7 @@ This is normal for an accessibility-infrastructure play. Stripe captures pennies
 
 ## 3.5 — Network effects (the under-appreciated upside)
 
-A production GenASL would generate three compounding effects that are absent in the v1 thesis:
+A production GenASL would generate three compounding effects that are absent in a consumer-learner model:
 
 1. **Corpus flywheel.** Every minute of generated ASL output produces a (text, generated motion, Deaf-rater feedback) triple. With explicit consent, this flywheel improves the corpus continuously. After 24 months at scale (say 500k user-hours of content/month), the proprietary corpus is unreplicable.
 

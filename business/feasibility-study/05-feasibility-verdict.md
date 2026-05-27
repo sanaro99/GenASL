@@ -44,7 +44,7 @@ If any of these fails: the project is not the right shape. Restructure as resear
 | At least one strategic partner LOI from a platform buyer | Signed before close |
 | At least one academic / Deaf-institution partner (Gallaudet, Boston U, RIT/NTID) on data | MoU in place |
 
-A $1M pre-seed with consumer-revenue-bridge ambitions is the wrong shape for this product. Either raise the larger round on the larger thesis, or pivot to the v1 consumer-learner thesis where smaller capital makes sense.
+A $1M pre-seed with consumer-revenue-bridge ambitions is the wrong shape for this product. Either raise the larger round on the larger thesis, or fall back to a consumer-learner thesis where smaller capital makes sense (a retreat, not the plan).
 
 ### Condition 3 — Technical milestones gated by user trust, not by engineering
 
@@ -65,7 +65,7 @@ Engineering velocity is not the constraint. Trust calibration is.
 | Tier 3 strategic pipeline by month 24 | At least 2 enterprises in late-stage RFP |
 | Consumer surfaces remain ≤10% of engineering effort | Tracked in monthly engineering review |
 
-If platform sales does not land by month 18, *that* is the signal to pivot — either to a Signapse-style focused-vertical service business or to the v1 consumer-learner thesis.
+If platform sales does not land by month 18, *that* is the signal to pivot — either to a Signapse-style focused-vertical service business or to a consumer-learner fallback.
 
 ---
 
@@ -99,7 +99,7 @@ A clear-eyed founder should know what GenASL is *not*:
 
 **If any of the four conditions in [§5.2](#52--the-conditions-that-must-hold) cannot be met within their stated time-frames, stop and reorganize as a research / open-source contribution.** That is also a legitimate and valuable outcome — and it is *much better* than a venture-backed effort that fails for the right reasons in year 3.
 
-The market is real. The technology is feasible. The architecture has a defensible position. The community will participate if treated as partners. The capital is available for credible teams on accessibility theses. The window is ~24 months before incumbents close it.
+The market is real. The technology is feasible. The architecture has a defensible position. The community will participate if treated as partners. The capital is available for credible teams on accessibility theses. The window is ~24 months — and it is narrowing: **Sorenson's January 2025 acquisition of Hand Talk + OmniBridge and its April 2026 ASL-avatar POCs are the incumbent moving to close it.** Speed and Deaf-community trust are now the binding constraints.
 
 **This is buildable, ethical, and commercially viable — under the conditions above, and only under those conditions.**
 

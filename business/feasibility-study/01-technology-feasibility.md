@@ -1,7 +1,8 @@
 # F1 — Technology Feasibility
 
 > **Question:** Can the proposed audio→3D-avatar system be built with today's technology, at acceptable cost and risk?
-> **Short answer:** Yes — and the design has a real advantage over pure-neural avatar synthesis if executed correctly. The bottleneck is **data + Deaf community partnership**, not models or compute.
+> **Short answer:** Yes — and the design has a real advantage over pure-neural avatar synthesis if executed correctly. The bottleneck is **clean data + Deaf community partnership**, not models or compute.
+> **Status (May 2026):** Phases 1–3 of the pipeline are shipped — audio ingest/ASR/prosody (Stage 1) and the LLM ASL-plan stage (Stage 2). The remaining critical path is Stage 3 (retrieval + NMM motion synthesis, Phases 4–5), the avatar/SDK (Phases 6–7), and — above all — the corpus.
 
 ---
 
@@ -36,19 +37,25 @@ This is the right shape. The question is *what each box actually is*. Here is th
 ┌────────────────────────────────────────────────────────────────────────────┐
 │  STAGE 3   MOTION SYNTHESIS  (the deterministic part)                      │
 │                                                                             │
-│   3a. Retrieval (high confidence path — ~70–80% of tokens):                │
-│       • Each ASL token → motion-library lookup (Deaf-signer MoCap clips)  │
-│       • SignCLIP-style embedding for nearest-neighbor sign retrieval       │
+│   3a. DEFAULT — phrase-level continuous-clip retrieval:                    │
+│       • Each clause/phrase → retrieve ONE continuous Deaf-signer clip      │
+│         from the corpus (OpenASL primary; SignCLIP-style embedding)        │
+│       • Preserves intra-phrase grammar + NMMs already in the recording     │
+│       • Lexical secondary (ASL Citizen) covers phrases that miss           │
 │                                                                             │
-│   3b. Generative in-between (low confidence + transitions ~20–30%):       │
-│       • T2S-GPT or motion-diffusion model fills gaps                       │
-│       • Conditioned on retrieved anchor signs (constrained generation)     │
+│   3b. FALLBACK — per-gloss stitching (last resort only):                  │
+│       • WLASL per-gloss clips chained; tagged fidelity="stitched"          │
+│         (or "degraded" if >50% of glosses miss)                            │
 │                                                                             │
-│   3c. NMM channel (parallel):                                              │
-│       • Prosody envelope → face-blendshape sequence                        │
+│   3c. Generative — transitions ONLY:                                       │
+│       • Constrained in-between between retrieved anchors                    │
+│       • Never originates a sign; only smooths timing between real ones     │
+│                                                                             │
+│   3d. NMM channel (parallel, augments the retrieved face):                │
+│       • Prosody envelope → face-blendshape augmentation                    │
 │       • Trained on Deaf-signer face capture (FACS / ARKit blendshapes)     │
 │                                                                             │
-│   Output: 30 fps SMPL-X / VRM-compatible motion stream                     │
+│   Output: 30 fps VRM-compatible motion stream                              │
 └────────────────────────────────────────────────────────────────────────────┘
                                   ↓
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -185,7 +192,7 @@ Foundation     Linguistic     Generative      Production      Launch
 
 ### Phase 3 (M12–M18) — Generative + avatar polish, $1.4M
 
-- T2S-GPT in production for non-retrieval segments
+- Constrained transition synthesis in production for inter-anchor gaps only
 - NMM channel trained on facial corpus; expressivity meaningfully present
 - Avatar diversity (4+ identity options) launched
 - SDK alpha; 3 paid pilot contracts ($25–50k ACV)
@@ -205,15 +212,17 @@ Foundation     Linguistic     Generative      Production      Launch
 This is the **most important design decision** the team will make. Plot of options:
 
 ```
-   FULL NEURAL                                          FULL RETRIEVAL
-     (SignDiff,         RETRIEVAL-AUGMENTED              (today's
-      T2S-GPT)          (RECOMMENDED)                   GenASL PoC)
+   FULL NEURAL          RETRIEVAL-AUGMENTED              FULL RETRIEVAL
+     (SignDiff,          (COMMITTED — GenASL)            (per-gloss clip
+      T2S-GPT,                                            stitching =
+      Sorenson POC)                                       the fallback tier)
 
    ───────────────────────────●────────────────────────────────────
                               ↑
-                  • 70–85% retrieved signs
-                  • 15–30% generated transitions  
-                  • Separate generative NMM channel
+                  • DEFAULT: phrase-level continuous-clip retrieval
+                  • Generated TRANSITIONS only (never originates a sign)
+                  • Separate generative NMM channel on the retrieved face
+                  • Per-gloss stitching is the tagged last resort
                   • Hash-cacheable; auditable
 
    Expressivity:  ★★★★★            ★★★★☆                ★★☆☆☆

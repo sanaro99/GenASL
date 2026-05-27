@@ -2,34 +2,45 @@
 
 This section answers two questions:
 
-1. **What exactly does GenASL promise — to whom, in language they recognize?**
-2. **What does the product become, in 24 months, to deliver on that promise?**
+1. **What does GenASL promise — to whom, in language they recognise?**
+2. **What does the product become, over 24 months, to deliver on that promise?**
 
 ---
 
 ## 4.1 — The honest value proposition
 
-Most accessibility AI marketing overclaims. GenASL must do the opposite. Here is the *credible* value claim — phrased differently for each buyer.
+Accessibility-AI marketing overclaims. GenASL does the opposite. Here is the *credible*
+claim, phrased per buyer — and note that **the Deaf viewer is never a buyer.**
 
-### For ASL learners (B2C)
+### For EdTech / LMS / MOOC platforms (primary B2B)
 
-> **"Practice ASL on the videos you already watch."**
-> Pause any YouTube video and see word-level ASL signs overlaid in time with the spoken English. It's not a substitute for a teacher — it's a millions-of-hours-richer-than-Duolingo flashcard built into every educational video on the internet.
+> **"An embeddable ASL track for your video library — no re-uploads, no human bottleneck."**
+> Drop our SDK into your player; we render an ASL avatar in your learners' first language,
+> anchored to real Deaf-signer recordings. Coverage and fidelity are reported per video for
+> Section 508 and procurement. One integration reaches every learner you have.
 
-### For school districts and ASL programs (B2B education)
+### For government & public-sector portals (primary B2B)
 
-> **"A free CALL (Computer-Assisted Language Learning) tool for ASL classrooms."**
-> Word-level gloss matches how ASL I/II curricula already teach. Students get sign exposure on TED-Ed, Crash Course, Khan Academy, and any teacher-assigned YouTube video. Schools get usage analytics and a centrally-managed extension deployment.
+> **"Make the Title II planning window count."**
+> The deadline moved to 2027–2028 and the DOJ itself flagged that current AI can't
+> remediate at scale. We are the ASL line item you can adopt now, with audit-grade
+> coverage reports mapped to WCAG 2.1 AA, and a self-hosted option for data-residency rules.
 
-### For LMS / EdTech / corporate L&D (B2B mid-market)
+### For streaming / media platforms (B2B)
 
-> **"An ASL augmentation layer for your existing video library — without re-uploading."**
-> Plug our SDK into your video player; we generate aligned ASL clips on the fly. Compliance reports document coverage. Self-hosted option available for data-residency-sensitive buyers.
+> **"ASL parity, before your competitor ships it."**
+> The EAA names sign-language interpretation for audiovisual media. We give you a
+> platform-agnostic ASL overlay with per-minute pricing your accessibility budget already
+> understands — and an avatar your viewers won't reject, because it's built *with* the
+> Deaf community, not at it.
 
-### For Deaf-community partners (non-monetary)
+### For the Deaf community (non-monetary, non-negotiable)
 
-> **"A pre-production tool, not a replacement for human interpretation."**
-> GenASL produces *gloss-level scaffolding* a Deaf editor can refine into a polished sign-language track. The product is built *with* Deaf collaborators and pays them for the corpus.
+> **"Augmentation, not replacement — and you are never billed for access."**
+> GenASL puts an ASL track on the long tail of content that has *none* today, because no
+> human interpreter is economically viable for it. Human interpretation remains the gold
+> standard for live, high-stakes, nuanced settings. Corpus contributors are paid, with
+> royalties. Deaf-led organisations use it free, forever.
 
 ---
 
@@ -37,96 +48,110 @@ Most accessibility AI marketing overclaims. GenASL must do the opposite. Here is
 
 | Buyer | Functional job | Emotional job | Social job |
 |-------|----------------|---------------|------------|
-| ASL learner | "Help me practice on real content, not flashcards" | Feel like progress is happening | Identify as a serious learner |
-| ASL teacher | "Give my students homework on authentic media" | Confidence the tool reinforces what I teach | Be seen as innovative |
-| EdTech accessibility lead | "Cover ASL line item in WCAG compliance plan" | De-risk the legal review | Win the procurement narrative |
-| Government webmaster | "Get the Title II deadline off my desk" | Avoid being on the news | Show measurable progress |
-| Creator (long-tail YouTuber) | "Be the accessible channel in my niche" | Pride in inclusive content | Audience differentiation |
+| EdTech accessibility lead | "Cover the ASL line item across my whole library" | De-risk the legal review | Win the procurement narrative |
+| Government webmaster | "Be ready for the 2027 Title II deadline" | Avoid being the headline | Show measurable progress |
+| Media platform PM | "Match EAA expectations and competitor parity" | Confidence it won't be rejected by Deaf users | Be seen as genuinely inclusive |
+| Enterprise L&D lead | "Make training accessible without per-video human cost" | Predictable budget | Brand as an inclusive employer |
+| Deaf viewer (beneficiary, not buyer) | "Watch the content hearing people watch, in ASL" | Belonging, not afterthought | Participate in the same culture |
 
 ---
 
-## 4.3 — The product wedge: what to actually build first
+## 4.3 — Why retrieval-augmented is the defensible product (not word clips, not pure neural)
 
-Given the competing options, here is the recommended wedge.
+The product wedge *is* the architecture. Three properties make it sellable where the
+alternatives aren't:
 
-```
-   ┌─────────────────────────────────────────────────┐
-   │  WEDGE: "ASL Practice Mode" for YouTube         │
-   │                                                 │
-   │  • Chrome extension, freemium                   │
-   │  • Pause-on-sign learning mode (key UX twist)   │
-   │  • Vocabulary tracker / streaks (light gamify)  │
-   │  • Teacher-friendly classroom mode (B2B hook)   │
-   └─────────────────────────────────────────────────┘
-```
+1. **Buyers buy paperwork.** A compliance officer challenged by a Deaf advocacy group needs
+   a defensible artifact. *"Every segment is anchored to a Deaf-signer recording; the model
+   only interpolates timing and NMMs"* is defensible. *"A neural net generated it"* is not.
+2. **Failure modes are bounded.** A retrieval miss is a momentary gap or a slightly
+   off-context sign (tagged `fidelity="stitched"`). A generative failure is an *uncanny*
+   output — a six-fingered hand, a dead face — which is reputationally catastrophic with the
+   Deaf community and is exactly the critique levelled at pure-neural avatars.
+3. **Corpus expansion has linear, ownable payoff.** Each capture session directly improves
+   coverage and *is owned*. Neural-only systems need orders of magnitude more data per
+   quality jump and can be reverse-engineered from public sets.
 
-**Why "ASL Practice Mode" beats "ASL Captions for the Deaf" as a wedge:**
-
-1. **Word-level gloss is actually correct for learners.** It matches ASL I curriculum. It's wrong for native consumption — but learners need exactly this granularity.
-2. **B2C learner traction → B2B education sales.** Once teachers see students using it on their own, district pilots get easy.
-3. **It defers the cultural-acceptability question** until the product has earned standing to enter the conversation.
-4. **It generates the data flywheel** — usage logs of which words confuse learners feed corpus prioritization.
-
-The existing GenASL codebase already does ~80% of what this wedge requires. The remaining 20% is UX polish, gamification, and a learner-mode toggle.
+This is **motion-RAG** — the same insight (retrieval beats free generation for
+high-stakes, auditable output) that made RAG win in document QA. Detail in
+[F1 §1.5](feasibility-study/01-technology-feasibility.md).
 
 ---
 
-## 4.4 — Product roadmap (24 months)
+## 4.4 — Product roadmap (mapped to the actual pipeline phases)
 
-### Phase 1 — Months 0–6: Validation & wedge launch
+The codebase has shipped **Phases 1–3** (audio backbone + interpreter brain). The business
+roadmap is the remaining phases plus the data and trust work that gates them.
+
+### M0–M6 — Foundation & data (Phases 4–5 begin)
 
 | Workstream | Deliverable | Why |
 |-----------|-------------|-----|
-| **Deaf community advisory** | 5-person paid advisory board (Gallaudet alumni network is the obvious starting place) | Cannot be skipped; everything else depends on this |
-| **Privacy & ToS hardening** | Replace `youtube-transcript-api` with official Data API + caption upload pipeline | Eliminate the single biggest fragility |
-| **Learner UX** | Pause-on-sign mode; per-sign confidence indicator; "I don't know this sign" feedback button | The wedge product |
-| **Chrome Web Store launch** | Public extension, freemium tier | Distribution begins |
-| **K-12 pilot** | 3 schools, free 1-year pilot with feedback contract | Reference customers |
+| **Deaf community advisory** | 5-person paid board; first non-founder hire is Deaf | The gate everything depends on |
+| **Corpus v1** | OpenASL + ASL Citizen indexed for phrase-level retrieval; first proprietary capture session | Phase 4 (retrieval) lands |
+| **Motion synthesis** | Retrieval-driven motion + NMM channel from prosody | Phase 5 lands |
+| **Closed demo** | Avatar v1 (VRM, single identity, basic NMMs) on instructional clips | Demoable for design partners |
+| **Gate** | Deaf-rater panel intelligibility **≥ 3.5/5** | No paid GTM before this |
 
-### Phase 2 — Months 6–12: Education GTM
-
-| Workstream | Deliverable |
-|-----------|-------------|
-| **Pricing live** | $9/mo individual; $4/seat/yr education | First revenue |
-| **LMS integrations** | Canvas + Brightspace add-ons (read-only assignments mode) | EdTech beachhead |
-| **Corpus expansion** | 2,000 → 4,000 glosses; signed by paid Deaf signers, with non-manual markers captured | Quality differentiator |
-| **Compliance reporting v1** | Coverage report PDF per video for procurement teams | Enterprise prep |
-
-### Phase 3 — Months 12–18: Enterprise wedge
+### M6–M12 — SDK + first contracts (Phases 6–7)
 
 | Workstream | Deliverable |
 |-----------|-------------|
-| **Browser SDK** | Embeddable on any HTML5 video player, not only YouTube | Removes platform risk |
-| **Self-hosted appliance** | Docker image; on-prem LLM (Ollama); offline mode | Sells into regulated buyers |
-| **First 5 paid enterprise contracts** | $30–60k ACV; LMS / training / public sector | Validate ACV model |
-| **Sentence-level synthesis R&D** | Pilot research project with Gallaudet / Boston U. | Future moat |
+| **Chrome extension** | Three.js + VRM overlay (Phase 6) — the showcase surface |
+| **Platform SDK + API** | Embeddable on any HTML5 `<video>` (Phase 7); adaptive sync (pause/seek/speed) |
+| **Compliance reporting v1** | Per-video coverage PDF mapped to WCAG 2.1 AA / EAA / Section 508 |
+| **First pilots** | 2–3 friendly platforms (an EdTech LMS, a public-broadcaster property) |
+| **Gate** | Second Deaf-rater panel **≥ 3.8/5**; ≥3 paid pilots active |
 
-### Phase 4 — Months 18–24: Platform
+### M12–M18 — Production & polish
 
 | Workstream | Deliverable |
 |-----------|-------------|
-| **Sentence-level ASL** | Beta of grammar-aware synthesis (topic-comment, classifiers, NMMs) | Real ASL, not gloss |
-| **BSL + AUSLAN** | Extend corpus & translator | UK/AU revenue |
-| **Partner channel** | 3Play / Verbit reseller pilots | Distribution flywheel |
-| **Series A readiness** | $15–20M raise at $80–120M post | Scaling capital |
+| **Corpus expansion** | 200 h+ proprietary, NMM-annotated, royalty-bearing |
+| **Avatar diversity** | 4+ identity options via motion retargeting (not re-capture) |
+| **Self-hosted appliance** | Docker + on-prem LLM (Ollama) + on-prem corpus for regulated buyers |
+| **Generative in-between** | Constrained transition synthesis for non-retrieval gaps only |
+| **Gate** | SOC 2 Type I; reference-customer NPS ≥ 30 |
+
+### M18–M24 — Scale
+
+| Workstream | Deliverable |
+|-----------|-------------|
+| **SDK GA** | Integrations for Brightcove, Kaltura, JW Player, Mux |
+| **10+ paid platform contracts** | ~$2M ARR run-rate |
+| **BSL / AUSLAN** | Reuse the architecture on new-language corpora |
+| **Series A readiness** | $15–25M raise on the corpus + integration moat |
 
 ---
 
 ## 4.5 — The non-negotiable: Deaf-community co-design
 
-This must be stated explicitly because the rest of the strategy collapses if it's skipped.
+The strategy collapses if this is skipped, so it is stated explicitly.
 
 **Before any paid GTM step:**
 
-1. Hire (paid) Deaf advisors. NAD, NBDA, Gallaudet career office, ASLized are the channels.
-2. Publish a public position statement: *"GenASL is an ASL augmentation tool for learners and supplementary access. It does not replace interpreters, captions, or human-produced ASL content for Deaf-native consumption."*
-3. Compensate every signer who contributes to the corpus (per-sign fee schedule + royalty if commercialized).
-4. Refuse contracts that position GenASL as "replacing" interpreters — even when the buyer offers premium pricing for that framing. This is the single biggest reputation risk in the space.
+1. Hire (paid) Deaf advisors — NAD, NBDA, Gallaudet, NTID, ASLized are the channels.
+2. Publish a position statement: *"GenASL is an ASL augmentation layer for content that
+   otherwise has none. It does not replace interpreters, captions, or human-produced ASL
+   for live, high-stakes, or nuanced settings."*
+3. Compensate every corpus contributor (per-clip fee + royalty if commercialised).
+4. Refuse contracts that frame GenASL as *replacing* interpreters — even at premium pricing.
+   This is the single biggest reputation risk in the space.
 
-This is a strategic decision, not just an ethical one. The history of the field (Apple's animojis, BBC's avatar trials, Bonn airport signing avatar) shows that products without Deaf endorsement get loud public criticism that crushes B2B sales cycles.
+History is unambiguous: products without Deaf endorsement (BBC avatar trials, the
+discontinued Bonn airport signing avatar) draw concentrated public criticism that crushes
+B2B sales cycles. Sorenson's avatar POC already
+[drew expert concern](https://sorenson.com/newsroom/sorenson-communications-unveils-ai-sign-language-translation-ast-proofs-of-concept/);
+GenASL's answer to that is structural, not cosmetic.
 
 ---
 
 ## 4.6 — The "why now" answer
 
-> "Three things converged in 2025–2026: ADA Title II deadlines force public-sector procurement; LLMs made gloss-translation cheap enough to render in real time in the browser; and the captioning industry has commoditized to the point where buyers want a next compliance line item to budget for. ASL is that line item."
+> "The compliance runway just moved *toward* us — ADA Title II is now a 2027–2028 planning
+> window, and the DOJ itself said current AI can't remediate accessibility at scale. The
+> EAA is live and names sign language. The data exists (OpenASL, ASL Citizen) to bootstrap
+> a retrieval corpus, and Phases 1–3 of the pipeline are shipped. And the incumbent
+> (Sorenson) just signalled the market is real by acquiring its way in. The window to plant
+> a Deaf-trust-and-corpus flag is ~24 months. After that, distribution belongs to whoever
+> got there first."
