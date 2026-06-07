@@ -1,5 +1,17 @@
 # GenASL — Interpreter-Avatar ASL Overlay
 
+## GenASL early prototype - deprecated
+For an older version of the solution which used YouTube transcripts and ASL Gloss intermediary to convert to word-for-word ASL, please watch [the demo](assets/demo/asl-gen-recording.mp4)
+
+#### GenASL prototype - Extenstion
+<img src="assets/demo/genasl_extension.png" width="400" alt="GenASL Prototype - Extenstion">
+
+#### GenASL prototype - Overlay
+<img src="assets/demo/genasl_overlay.png" width="400" alt="GenASL Prototype - Overlay">
+
+---
+
+## New in the works GenASL
 GenASL is an AI pipeline that watches what a YouTube video says and generates a 3D
 American Sign Language **interpreter avatar** as a Picture-in-Picture overlay,
 mimicking how a real ASL interpreter listens, interprets, and signs.
