@@ -134,13 +134,13 @@ Three commercial tiers covering the buyer spectrum:
 | **TOTAL ARR** | **$30k** | **$800k** | **$3.9M** | **$10.2M** | **$22.4M** |
 | Blended gross margin | 60% | 70% | 76% | 80% | 82% |
 
-This lands at the same year-5 ARR as the v1 mixed model (~$22M), but with **15× fewer customers, much stronger gross margin, and a defensible enterprise revenue base for acquisition or Series B.** It is the better-quality revenue.
+This lands at roughly the year-5 ARR a mixed B2C+B2B model would (~$22M), but with **15× fewer customers, much stronger gross margin, and a defensible enterprise revenue base for acquisition or Series B.** It is the better-quality revenue.
 
 ---
 
 ## 4.7 — Comparative honest scorecard
 
-| Criterion | Platform-pays | Consumer-pays | Hybrid (v1 plan) |
+| Criterion | Platform-pays | Consumer-pays | Hybrid (B2C+B2B) |
 |---|:--:|:--:|:--:|
 | Speed to first $100k ARR | ⚠️ slow (6–12 mo) | ✅ fast (3 mo) | ✅ fast |
 | Total addressable revenue at Y5 | ✅ $22M | ⚠️ ~$8–10M | ✅ ~$22M |
@@ -162,7 +162,7 @@ A founder could reasonably ask: *should we run consumer-pays for 6–12 months t
 
 **My honest read:**
 - **No, if you can raise.** The $5.5M seed budgeted in [F1 §1.3](01-technology-feasibility.md) buys you 24 months without needing bridge revenue. Use that time. Consumer-pays right now would distract a 3-ML-engineer team for marginal cash.
-- **Yes, if you can't raise.** If pre-seed is the only option, a free + cheap-Pro Chrome extension generates a tiny revenue trickle (~$300–700k/yr) that buys time. But then you have *two* products to maintain, and the v1 trade-offs apply.
+- **Yes, if you can't raise.** If pre-seed is the only option, a free + cheap-Pro Chrome extension generates a tiny revenue trickle (~$300–700k/yr) that buys time. But then you have *two* products to maintain, and the consumer-product trade-offs apply.
 
 Bridge if you must. Don't bridge if you don't.
 

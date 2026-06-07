@@ -64,6 +64,17 @@ assets/final/*.mp4
 assets/words/
 assets/chained/
 
+# Phase 4 corpus — video bytes + per-clip pose JSON are huge; we only
+# track the manifest JSON and the FAISS index file.
+assets/corpus/openasl/
+assets/corpus/openasl_poses/
+assets/corpus/openasl_embeddings.npy
+assets/corpus/aslcitizen/
+assets/corpus/aslcitizen_poses/
+assets/corpus/aslcitizen_embeddings.npy
+# Phase 4 WLASL pose-library fallback output
+assets/pose_library/
+
 # Pipeline stage disk cache (regenerated on first run)
 data/cache/
 

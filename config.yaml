@@ -53,6 +53,22 @@ avatar:
   transition_ms: 120
   pip_width_ratio: 0.30
 
+# --- Corpus retrieval (Phase 4) ---
+# OpenASL = primary phrase-level retrieval corpus.
+# ASL Citizen = secondary lexical fallback (per-gloss).
+# WLASL = last-resort gloss stitching (Phase 4 also builds a 500-gloss subset).
+#
+# embedding_model is shared between build_corpus_index.py and the runtime
+# RetrievalIndex; changing it invalidates the index.
+retrieval:
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  phrase_threshold: 0.55
+  lexical_threshold: 0.70
+  max_duration_drift: 0.40
+  max_clip_duration_ms: 12000
+  primary_corpus: "openasl"
+  secondary_corpus: "aslcitizen"
+
 # --- BBC Learning English test videos (Easy English Conversations) ---
 test_videos:
   - id: "I_tRSrPru94"

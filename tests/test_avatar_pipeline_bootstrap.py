@@ -46,7 +46,7 @@ def test_settings_tolerates_legacy_top_level_keys():
 
 
 def test_v5_schema_round_trips():
-    """All v5.0 models serialize and deserialize without losing fields."""
+    """All v5.1 models serialize and deserialize without losing fields."""
     plan = AvatarRenderPlan(
         run_id="rid",
         video_id="vid",
@@ -58,14 +58,32 @@ def test_v5_schema_round_trips():
             AslPlanSegment(
                 chunk_id="c0", start_ms=0, end_ms=1000,
                 sign_sequence=["HELLO", "WORLD"],
+                query_text="hello world",
+                retrieved_clip_id="openasl_00042",
+                retrieval_similarity=0.82,
+                fidelity="retrieval",
             )
         ],
     )
     payload = plan.model_dump_json()
     parsed = AvatarRenderPlan.model_validate_json(payload)
-    assert parsed.schema_version == "5.0"
+    assert parsed.schema_version == "5.1"
     assert parsed.motion[0].bone_rotations["Hips"] == [0, 0, 0, 1]
     assert parsed.plan_segments[0].sign_sequence == ["HELLO", "WORLD"]
+    assert parsed.plan_segments[0].retrieved_clip_id == "openasl_00042"
+    assert parsed.plan_segments[0].fidelity == "retrieval"
+
+
+def test_v5_schema_back_compat_for_pre_phase5_segments():
+    """A segment without the Phase-5 retrieval fields still parses."""
+    seg = AslPlanSegment(
+        chunk_id="c0", start_ms=0, end_ms=1000,
+        sign_sequence=["HELLO"],
+    )
+    assert seg.retrieved_clip_id is None
+    assert seg.retrieval_similarity is None
+    assert seg.fidelity is None
+    assert seg.query_text == ""
 
 
 def test_interpreter_chunk_and_audio_analysis_models():

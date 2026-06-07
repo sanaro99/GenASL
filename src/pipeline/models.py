@@ -95,10 +95,18 @@ class AslPlanSegment(BaseModel):
     end_ms: int
     topic_comment: list[str] = Field(default_factory=list)
     sign_sequence: list[str] = Field(default_factory=list)   # internal gloss tokens
+    # Phrase-level retrieval query (Phase 4/5). The interpreter brain may
+    # emit this directly; if absent the synth stage falls back to text
+    # composed from topic_comment.
+    query_text: str = ""
     nmm_intent: dict[str, float] = Field(default_factory=dict)
     emphasis_signs: list[str] = Field(default_factory=list)
     role_shifts: list[dict] = Field(default_factory=list)
     notes: str = ""
+    # Populated by MotionSynthStage in Phase 5 (added at schema v5.1):
+    retrieved_clip_id: str | None = None
+    retrieval_similarity: float | None = None
+    fidelity: Literal["retrieval", "lexical", "stitched", "degraded"] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +133,7 @@ class NmmFrame(BaseModel):
 # ---------------------------------------------------------------------------
 
 class AvatarRenderPlan(BaseModel):
-    schema_version: Literal["5.0"] = "5.0"
+    schema_version: Literal["5.1"] = "5.1"
     run_id: str
     video_id: str
     generated_at: str
@@ -188,6 +196,10 @@ class MotionSynthOutput(BaseModel):
     motion: list[MotionFrame]
     nmm: list[NmmFrame]
     duration_ms: int
+    # Phase 5 fills these — mirror of the input segments with retrieval
+    # metadata (clip id, similarity, fidelity tier) populated. Default
+    # empty so callers built against the v5.0 shape still parse.
+    annotated_segments: list[AslPlanSegment] = Field(default_factory=list)
 
 
 class AvatarTimelineInput(BaseModel):

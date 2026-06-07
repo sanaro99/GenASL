@@ -4,12 +4,11 @@ Audio in → analyse (ASR + prosody + emotion) → chunk semantically →
 interpret with an LLM "interpreter brain" → synthesise motion + NMMs →
 emit an :class:`AvatarRenderPlan` for the three.js frontend.
 
-This module is a *skeleton* — concrete stages land in Phases 2–5.
-Until then, :meth:`InterpreterAvatarPipeline.run` raises
-``NotImplementedError`` so a mis-routed call fails loudly rather than
-silently returning an empty plan.
-
-See ``docs/plan/`` for the per-phase implementation roadmap.
+This module is a *partial* skeleton: Phase 2 wires the audio stages,
+and a helper :meth:`run_audio_only` returns a typed
+:class:`AudioAnalysis` so Phase 3 can build on top. The full
+:meth:`run` still raises ``NotImplementedError`` until Phase 5 ships
+motion synthesis. See ``docs/plan/`` for the per-phase roadmap.
 """
 
 from __future__ import annotations
@@ -18,18 +17,27 @@ import logging
 from pathlib import Path
 
 from src.core.config import Settings, get_settings
-from src.pipeline.models import AvatarRenderPlan
+from src.pipeline.models import (
+    AudioAnalysis,
+    AudioAnalyzeInput,
+    AudioIngestInput,
+    AvatarRenderPlan,
+    InterpreterPlanInput,
+    InterpreterPlanOutput,
+    SemanticChunkInput,
+)
+from src.pipeline.stages import (
+    AudioAnalyzeStage,
+    AudioIngestStage,
+    InterpreterPlanStage,
+    SemanticChunkStage,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class InterpreterAvatarPipeline:
-    """End-to-end audio → interpreter → 3D-avatar timeline pipeline.
-
-    Stage wiring is filled in across Phases 2–5. The constructor is kept
-    side-effect-free so that importing the class never instantiates the
-    heavier stage models (faster-whisper, mediapipe).
-    """
+    """End-to-end audio → interpreter → 3D-avatar timeline pipeline."""
 
     def __init__(
         self,
@@ -38,17 +46,37 @@ class InterpreterAvatarPipeline:
     ) -> None:
         self.settings = settings or get_settings()
         self.cache_root = cache_root
-        # Stages will be wired in subsequent phases:
-        #   self.audio_ingest    (Phase 2)
-        #   self.audio_analyze   (Phase 2)
-        #   self.semantic_chunk  (Phase 3)
-        #   self.interpreter     (Phase 3)
-        #   self.motion_synth    (Phase 5)
-        #   self.avatar_timeline (Phase 5)
+        # Phase 2 — audio backbone:
+        self.audio_ingest = AudioIngestStage(self.settings, cache_root)
+        self.audio_analyze = AudioAnalyzeStage(self.settings, cache_root)
+        # Phase 3 — interpreter brain:
+        self.semantic_chunk = SemanticChunkStage(self.settings, cache_root)
+        self.interpreter = InterpreterPlanStage(self.settings, cache_root)
+        # Phase 5 — motion synthesis (motion_synth, avatar_timeline)
+
+    def run_audio_only(
+        self, video_id: str, *, use_cache: bool = True
+    ) -> AudioAnalysis:
+        """Run Stages 1–2 only and return the :class:`AudioAnalysis`.
+
+        Useful for Phase 3 development and for ``pytest`` integration
+        tests of the audio backbone without depending on later phases.
+        """
+        ingest = self.audio_ingest.run(
+            AudioIngestInput(video_id=video_id), use_cache=use_cache
+        )
+        analyzed = self.audio_analyze.run(
+            AudioAnalyzeInput(
+                audio_path=ingest.audio_path,
+                duration_ms=ingest.duration_ms,
+            ),
+            use_cache=use_cache,
+        )
+        return analyzed.analysis
 
     def run(self, video_id: str, *, use_cache: bool = True) -> AvatarRenderPlan:
         raise NotImplementedError(
-            "InterpreterAvatarPipeline is a skeleton. "
-            "Stage wiring lands in Phases 2–5 — see docs/plan/ "
-            "for the implementation roadmap."
+            "InterpreterAvatarPipeline is partial: Phases 3–5 must land "
+            "before run() can produce an AvatarRenderPlan. Use "
+            "run_audio_only() for Stage 1–2 output. See docs/plan/."
         )

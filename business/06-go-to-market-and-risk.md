@@ -1,97 +1,94 @@
-# 6 — Go-to-Market & Risk
+# 6 — Go-to-Market, Risk & Decision
 
-This final section is the operating plan: how the business actually gets built, who pays for it, and what could break it.
+The operating plan: how the business gets built, who pays, what could break it, and the
+explicit gates that decide whether to keep going.
 
 ---
 
 ## 6.1 — Distribution strategy
 
-GenASL has the rare advantage of **three viable distribution surfaces** that compound rather than compete.
+Platform-pays B2B is the motion. Three distribution surfaces compound rather than compete.
 
-### Surface A — Chrome Web Store (consumer learner GTM)
-
-| | |
-|---|---|
-| **Reach** | ~3.5B Chrome users globally |
-| **Cost** | Listing free; ASO via accessibility keywords; mid-funnel content marketing |
-| **Conversion** | Freemium → Pro at ~3% target; ARPU $72/yr |
-| **Tactic** | Partnerships with ASL YouTube creators (Bill Vicars, ASL Stew, Sign Duo) for organic reviews |
-
-### Surface B — Education channel (district sales)
+### Surface A — Platform direct (the revenue engine)
 
 | | |
 |---|---|
-| **Reach** | ~17,000 US school districts; ~700 with ASL programs |
-| **Cost** | One inside-sales rep; conference presence (ACTFL, ASL Teachers Association) |
-| **Sales cycle** | 3–6 months |
-| **Tactic** | Free 1-year pilot for first 25 districts; case-study-led inbound thereafter |
-
-### Surface C — Enterprise direct (compliance buyers)
-
-| | |
-|---|---|
-| **Reach** | ~500 mid-market enterprises with significant video libraries + compliance pressure |
+| **Reach** | ~500 mid-market platforms (EdTech, LMS, broadcasters, enterprise L&D) + ~50 strategic accounts |
 | **Cost** | Founder-led sales for first 10; AE hire by year 2 |
-| **Sales cycle** | 6–12 months |
-| **Tactic** | Co-marketing with accessibility consultancies (Deque, Level Access, Karl Groves); RFP-response template targeting ADA Title II procurement |
+| **Sales cycle** | 3–12 months |
+| **Tactic** | Co-marketing with accessibility consultancies (Deque, Level Access, AudioEye); RFP-response templates targeting the 2027–28 Title II planning window; one strategic LOI before seed close |
 
-### A flywheel between the three
+### Surface B — Developer / SDK self-serve (PLG funnel)
+
+| | |
+|---|---|
+| **Reach** | Any team with an HTML5 `<video>` player; long-tail platforms |
+| **Cost** | Docs + free tier; developer-relations content |
+| **Conversion** | Free 1,000 min/mo → Tier 1 paid → upsell to Tier 2 |
+| **Tactic** | Public SDK, sample integrations (Brightcove, Kaltura, JW Player, Mux), accessibility-keyword SEO |
+
+### Surface C — Chrome extension showcase (signal, not revenue)
+
+| | |
+|---|---|
+| **Reach** | ~3.5B Chrome users; Deaf community + ASL educators + procurement evaluators |
+| **Cost** | Listing free; ≤10% of engineering effort |
+| **Tactic** | "Your competitor's site already loads ASL via our extension" demos for platform sales; Deaf-community feedback loop; partnerships with ASL creators (Bill Vicars, ASL Stew) |
+
+### The flywheel
 
 ```
-   Consumer learners use it on YouTube
+   Showcase extension demonstrates ASL on real platforms
               ↓
-   ASL teachers see students using it
+   Platform PM sees it on their own (or a competitor's) content
               ↓
-   Teachers ask districts to license it
+   Platform integrates the SDK; pays per minute
               ↓
-   District deployment generates compliance reports
+   Generated output + Deaf-rater feedback expands the corpus
               ↓
-   Compliance reports become enterprise procurement evidence
-              ↓
-   Enterprise deployment generates revenue + corpus expansion
-              ↓
-   Better corpus improves consumer experience  ←──── back to top
+   Better corpus raises fidelity → easier next sale, more induced demand
+              ↓ (back to top)
 ```
 
-This flywheel is the strategic centerpiece. Each surface feeds the next; the consumer free tier is the corpus + brand engine, not a revenue engine.
+Every minute of generated output yields a *(text, motion, Deaf-rater feedback)* triple
+that, with consent, improves the proprietary corpus — the compounding asset.
 
 ---
 
-## 6.2 — 24-month operating plan
+## 6.2 — 24-month operating plan (gated, mapped to pipeline phases)
 
-### Quarters 1–2 — Foundation (target spend: ~$200k)
+### M0–M6 — Foundation & data (Phases 4–5) · ~$1.4M
 
-- [ ] Recruit and pay 5-person Deaf advisory board
-- [ ] Replace `youtube-transcript-api` with official Data API caption endpoints + user-upload fallback
-- [ ] Ship "Practice Mode" UX in Chrome extension
-- [ ] Launch on Chrome Web Store with freemium tier
-- [ ] Recruit 3 pilot school districts (free, 1-year, feedback contract)
-- [ ] Apply for SBIR Phase I, NIDILRR, and Innovate-UK-style grants (~$200k non-dilutive potential)
+- [ ] Recruit and pay 5-person Deaf advisory board; first non-founder hire is Deaf
+- [ ] Index OpenASL + ASL Citizen for phrase-level retrieval (Phase 4)
+- [ ] Stand up markerless capture with a studio/academic partner (Gallaudet/NTID); first proprietary session
+- [ ] Motion synthesis + NMM channel (Phase 5); Avatar v1 demoable
+- [ ] Publish "augmentation, not replacement" position statement
+- [ ] Apply for SBIR Phase I, NIDILRR, Innovate-UK-style grants (~$200k non-dilutive)
+- [ ] **Gate:** Deaf-rater panel intelligibility **≥ 3.5/5** → enter GTM
 
-### Quarters 3–4 — Education revenue (target spend: ~$400k)
+### M6–M12 — SDK + first contracts (Phases 6–7) · ~$1.4M
 
-- [ ] Education tier live ($4/seat/yr) with Google Admin + GPO managed deploy
-- [ ] Canvas + Brightspace add-ons published
-- [ ] Corpus expansion: 2,000 → 4,000 glosses with NMMs (paid Deaf signers)
-- [ ] First $250k ARR
-- [ ] Pre-seed close (~$1M at $5–8M post)
+- [ ] Chrome extension (three.js + VRM, Phase 6); platform SDK + API (Phase 7)
+- [ ] Compliance reporting v1 (WCAG 2.1 AA / EAA / Section 508 mapping)
+- [ ] 2–3 friendly platform pilots; first paid contract (≥$25k ACV)
+- [ ] Seed close (~$4–5M); ≥1 strategic platform LOI signed before close
+- [ ] **Gate:** second Deaf-rater panel **≥ 3.8/5**; ≥3 pilots active
 
-### Quarters 5–6 — Enterprise pilot (target spend: ~$600k)
+### M12–M18 — Production & polish · ~$1.4M
 
-- [ ] Browser SDK released (any HTML5 video player)
-- [ ] First 3 paid enterprise contracts ($60k ACV avg)
-- [ ] Coverage-report PDF + WCAG mapping live
-- [ ] Hire: 1 AE, 1 ML engineer, 1 Deaf community manager
-- [ ] $1M ARR mark
-
-### Quarters 7–8 — Compliance flagship (target spend: ~$800k)
-
+- [ ] Corpus expansion to 200 h+ proprietary, NMM-annotated, royalty-bearing
 - [ ] Self-hosted appliance GA (Docker + Ollama + on-prem corpus)
-- [ ] First public-sector contract (state government or federal agency)
-- [ ] SOC 2 Type I in progress
-- [ ] Sentence-level synthesis pilot with academic partner
-- [ ] $2.5M ARR mark
-- [ ] Seed extension or Series A prep (~$8–15M)
+- [ ] Avatar diversity via motion retargeting (4+ identities)
+- [ ] 4+ Tier-2 contracts ($300k+ ARR); SOC 2 Type I
+- [ ] **Gate:** reference-customer NPS ≥ 30; panel **≥ 4.0/5**
+
+### M18–M24 — Scale · ~$1.3M
+
+- [ ] SDK GA; integrations for Brightcove, Kaltura, JW Player, Mux
+- [ ] 10+ paid platform contracts; ~$2M ARR run-rate
+- [ ] First Tier-3 strategic in late-stage RFP; BSL/AUSLAN corpus pilot
+- [ ] Series A close (~$15–25M)
 
 ---
 
@@ -99,29 +96,31 @@ This flywheel is the strategic centerpiece. Each surface feeds the next; the con
 
 | Round | Timing | Amount | Pre-money | Use of funds | Source |
 |-------|--------|--------|-----------|-------------|--------|
-| **Grants** | Months 0–6 | $200k | n/a | Validation + corpus | SBIR, NIDILRR, Innovate UK, Ford Foundation accessibility line |
-| **Pre-seed** | Month 9 | $1.0M | $5–8M | Education channel + 1 AE | Mission-aligned VC (Empirical, AI for Good fund), accessibility angels |
-| **Seed** | Month 18 | $4–6M | $20–30M | Enterprise sales, SDK, SOC 2 | Generalist seed VC + EdTech vertical fund |
-| **Series A** | Month 24–30 | $15–20M | $80–120M | International expansion, sentence-level R&D | EdTech-focused growth VC; possible strategic from 3Play / Verbit ecosystem |
+| **Grants** | M0–6 | $200k | n/a | Validation + corpus | SBIR, NIDILRR, Innovate UK, Ford Foundation accessibility line |
+| **Seed** | M9–12 | $4–5M | $12–20M | Data, model, SDK, Deaf-first team | Mission-aligned VC (accessibility/AI-for-good), EdTech vertical, accessibility angels |
+| **Series A** | M24–30 | $15–25M | $80–120M | International (BSL/AUSLAN), domain corpora, GTM scale | EdTech/AI growth VC; possible strategic from a captioning/VRS ecosystem |
 
-Total dilution to Series A: ~35–40%. Tight for an accessibility-tech company but possible because gross margins are SaaS-grade.
+A $1M pre-seed with consumer-revenue-bridge ambitions is the **wrong shape** for this
+product — the build needs the larger round on the larger thesis. Either raise it, or run
+the research/open-source fallback where smaller capital fits.
 
 ---
 
-## 6.4 — Hiring sequence (first 10 hires)
+## 6.4 — Hiring sequence (first 10)
 
-1. Deaf community manager (paid advisory board → permanent hire by month 12)
-2. ASL curriculum specialist (part-time, content + corpus)
-3. ML engineer (translation pipeline + sentence-level R&D)
-4. Senior frontend engineer (extension + SDK)
-5. Account executive (education + enterprise)
-6. Product designer (accessibility-specialist)
-7. Customer success manager
-8. DevRel / partnerships (LMS integrations)
-9. Compliance / security lead (SOC 2)
-10. ML researcher (sentence-level ASL synthesis)
+1. **Deaf community manager** (paid advisory → permanent by M12) — the keystone hire
+2. ML researcher (sign-language + motion retrieval)
+3. ML/inference engineer (production pipeline)
+4. Senior WebGPU / frontend engineer (extension + SDK)
+5. Backend / SDK engineer
+6. ASL linguistics consultant (part-time; corpus + QA)
+7. Product designer (accessibility specialist)
+8. Account executive (platform sales)
+9. Customer success manager
+10. Compliance / security lead (SOC 2)
 
-Notably: a Deaf hire in the *first* slot. Not as token; as the keystone that makes every later hire's work credible.
+A Deaf hire in the **first** slot — not as a token, as the keystone that makes every later
+hire's work credible.
 
 ---
 
@@ -129,47 +128,74 @@ Notably: a Deaf hire in the *first* slot. Not as token; as the keystone that mak
 
 | # | Risk | Likelihood | Impact | Mitigation |
 |---|------|:--:|:--:|-----------|
-| R1 | **Deaf-community rejection** of the product framing | High | Catastrophic | Pre-Phase-1 advisory; explicit "augmentation, not replacement" positioning; compensated corpus contributors |
-| R2 | **YouTube ToS change or transcript API removal** | Medium | High | Replace with official Data API + caption-upload + multi-platform SDK by month 12 |
-| R3 | **WLASL coverage ceiling** (gloss vocab ~2k) | Certain | Medium | Paid corpus expansion plan; learner-mode is more forgiving of coverage gaps |
-| R4 | **Incumbents (3Play, Verbit) ship ASL** | Medium | High | Move first; secure 3+ enterprise reference logos by month 18; consider being acquired-by rather than competing-with |
-| R5 | **Platforms ship native ASL** (YouTube, TikTok) | Low-Medium | Catastrophic to consumer tier; minor to enterprise | Education + enterprise revenue is platform-independent |
-| R6 | **LLM cost or API risk** | Low | Medium | Multi-provider; Ollama self-host path already in place; tested fallback chain |
-| R7 | **ADA litigation against GenASL itself** for inaccessible output | Low | High | Crisp disclaimers; positioning as augmentation; do not market as "ADA-compliant ASL interpretation" |
-| R8 | **Founder/team accessibility-domain inexperience** | Medium | Medium | Deaf advisory + Deaf community manager hire |
-| R9 | **WLASL licensing / data provenance ambiguity** | Medium | High | Legal review of corpus by month 3; transition to internally-recorded clips for commercial tier |
-| R10 | **Slow public-sector procurement** | High | Medium | Education + private enterprise revenue covers cash burn |
+| R1 | **Deaf-community rejection** of framing | High | Catastrophic | Pre-Phase-1 advisory; "augmentation, not replacement"; compensated contributors; quarterly Deaf-rater panel |
+| R2 | **Incumbent (Sorenson) out-distributes** | **Medium-High** (now live) | High | Move first; 3+ platform logos by M18; differentiate on Deaf-trust + auditable corpus + media-overlay niche; acquisition is a valid outcome |
+| R3 | **Platform ships native ASL** (YouTube/Netflix) | Low-Medium | Catastrophic to showcase; minor to B2B | EdTech/gov/enterprise revenue is platform-independent; pivot 100% to SDK/white-label |
+| R4 | **Clean-corpus build slips** (data is the critical path) | Medium | High | Bootstrap on public sets (OpenASL/ASL Citizen); markerless capture; phrase-level retrieval degrades gracefully (tagged fidelity) |
+| R5 | **Pure-neural overtakes the corpus moat** | Medium | High | Accelerate productisation; lean on Deaf-trust + integration lock-in, which a better model doesn't erase |
+| R6 | **Long-tail / classifier-heavy coverage gaps** | Certain (bounded) | Medium | Domain capture in later phases; honest scope disclosure; never claim narrative/poetic ASL |
+| R7 | **ADA litigation against GenASL's own output** | Low | High | Crisp disclaimers; "augmentation" positioning; never market as "ADA-compliant interpretation" |
+| R8 | **LLM cost / API risk** | Low | Medium | Multi-provider; Ollama self-host path already in the codebase |
+| R9 | **Corpus licensing / provenance ambiguity** | Medium | High | Legal review by M3; consented proprietary capture for the commercial tier |
+| R10 | **Slow public-sector procurement** | High | Medium | EdTech + private-platform revenue covers burn while gov RFPs mature toward 2027–28 |
 
 ---
 
-## 6.6 — Strategic exit options
+## 6.6 — The conditions that must hold (decision gates)
 
-A founder should know all three before raising.
+These are sequential; a failure at any prior condition invalidates the next. Full rationale
+in [F5](feasibility-study/05-feasibility-verdict.md).
+
+**Condition 1 — Deaf partnership is real, not performative.** Paid advisory board + signed
+agreements by M3; first non-founder hire Deaf by M4; public position statement with NAD-class
+endorsement; contributors compensated; first Deaf-rater panel by M8. *If any fail: restructure
+as research/open-source, not a venture.*
+
+**Condition 2 — Seed, not bridge.** ~$4–5M raised by M12; ≥1 platform LOI before close; ≥1
+academic/Deaf-institution data MoU (Gallaudet/BU/NTID).
+
+**Condition 3 — Milestones gated by trust, not engineering.** Closed beta only at panel
+≥3.5/5; public beta at ≥3 paid pilots + panel ≥3.8/5; GA at SOC 2 Type I + ≥10 contracts +
+panel ≥4.0/5.
+
+**Condition 4 — Platform-pays is the primary motion.** First paid platform by M12; 4+ Tier-2
+by M18; Tier-3 pipeline by M24; consumer surfaces ≤10% of engineering effort. *If platform
+sales don't land by M18, pivot to a focused-vertical service business or the fallback.*
+
+---
+
+## 6.7 — Strategic exit options
 
 | Exit | Timing | Acquirer profile | Likely range |
 |------|--------|------------------|--------------|
-| **Acquired by captioning incumbent** | Year 3–5 | 3Play, Verbit, AI Media | 4–8× ARR; $20–80M |
-| **Acquired by accessibility platform** | Year 4–6 | Deque, Level Access, AudioEye | 5–10× ARR; $40–120M |
-| **Acquired by EdTech platform** | Year 3–5 | Canvas (Instructure), Duolingo, Coursera | Education revenue × multiplier; $30–80M |
-| **Continued independent growth** | Year 5+ | n/a | $20M+ ARR profitable specialty SaaS |
+| **Captioning incumbent** | Y3–5 | 3Play, Verbit, AI Media | 4–8× ARR; $20–80M |
+| **Sign-language / VRS incumbent** | Y3–5 | **Sorenson**, accessibility platforms | 5–8× ARR; $40–200M |
+| **Accessibility platform** | Y4–6 | AudioEye, Level Access, Deque | 5–10× ARR; $40–120M |
+| **Independent growth** | Y5+ | n/a | $20M+ ARR profitable specialty SaaS |
 
-The market is **not** a winner-take-all market. A focused profitable $30M ARR specialty SaaS is a perfectly good landing state — and is materially more achievable than chasing a $1B unicorn outcome.
+This is **not** a winner-take-all market and **not a unicorn**. A realistic best case is a
+**$200–500M outcome at Y5–7**, most plausibly via acquisition by Sorenson or a captioning
+incumbent that wants the corpus + Deaf-community standing it can't build internally. A
+profitable $30M-ARR independent is also a perfectly good landing state.
 
 ---
 
-## 6.7 — The decision call
-
-**Is this project feasible, innovative, and business-viable?**
+## 6.8 — The decision call
 
 | Lens | Verdict |
 |------|---------|
-| **Feasibility** | ✅ Technical path is clear; codebase is real; corpus is reproducible |
-| **Innovation** | ✅ Browser overlay + retrieval-augmented architecture is genuinely novel in this space |
-| **Market exists** | ✅ Regulated demand is real, large, and growing — captioning is $2.5B+ at 15% CAGR; ASL is the next add-on |
-| **Business case** | ⚠️ Conditionally. Consumer alone won't fund it; B2B education and enterprise compliance are the actual business. |
-| **Ethics & community fit** | ⚠️ Requires Deaf-first co-design or the entire thesis collapses |
-| **Founder fit** | ❓ Cannot assess from this analysis; the team must honestly answer whether they want to spend the next 5 years inside an accessibility-tech company, not just a generative-AI demo. |
+| **Feasibility** | ✅ Buildable in 24 months at ~$5.5M; Phases 1–3 shipped; corpus reproducible from public sets + capture |
+| **Innovation** | ✅ The *combination* — retrieval-anchored + parallel-NMM + SDK + platform-pays + Deaf-sourced data — is unmatched |
+| **Market exists** | ✅ Regulated demand real and growing (extended Title II, live EAA); sign-language tech 8–20% CAGR |
+| **Market grows** | ✅ Tool induces ~3× market expansion by 2035 |
+| **Business case** | ⚠️ Conditional — platform-pays works at ~$22M Y5 ARR, but needs a real seed and depends on Tier-2/3 landing |
+| **Ethics & community fit** | ⚠️ Conditional — collapses without Deaf-first co-design |
+| **Incumbent timing** | ⚠️ Window narrowed — Sorenson is moving; ~24 months to plant the flag |
 
-**Recommended posture:** Proceed to a 6-month "Phase 1" milestone gate. If by month 6 the team has (a) a paid Deaf advisory board operational, (b) ≥1,000 active Chrome extension users, (c) ≥1 signed school pilot, and (d) a public Deaf-community position statement, then continue and raise pre-seed. If any of those four are missing, the right move is to pause monetization and reorganize the project as a research / open-source contribution to the field rather than a venture-backed startup.
+**Recommended posture: Proceed to a 6-month Phase-1 gate.** If by M6 the team has (a) a paid
+Deaf advisory board, (b) a working retrieval + NMM demo rated ≥3.5/5 by a Deaf panel, (c) ≥1
+platform pilot or strategic LOI, and (d) a public position statement, then raise the seed
+and continue. **If any of the four is missing, pause monetisation and reorganise as a
+research / open-source contribution to the field.**
 
-That gate is more important than any market chart in this document.
+That gate matters more than any chart in this plan.

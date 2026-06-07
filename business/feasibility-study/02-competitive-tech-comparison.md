@@ -54,12 +54,13 @@ The hybrid approach is not the cheapest or fastest, but is the only one that **s
 - **Funding:** ~$3.5M total ([Crunchbase](https://www.crunchbase.com/organization/signapse-ec44)).
 - **Lesson:** Their wedge (transport / announcements) is one where vocabulary is bounded — a smart product choice. GenASL must pick its analogous bounded wedge first (we propose: **educational / instructional video**).
 
-### Hand Talk (Brazil, Libras + ASL)
+### Hand Talk (Brazil, Libras + ASL) — now part of Sorenson
 
-- **Tech:** "Hugo" 3D avatar; mostly Family 2 (rule-based notation) with neural smoothing. ASL is bolted on top of Libras pipeline.
-- **Strength:** 10M+ app downloads; deep B2B with Brazilian banks/gov ([App Store](https://apps.apple.com/us/app/hand-talk-learn-sign-language/id659816995)).
-- **Limit:** Avatar is widely criticized in the Brazilian Deaf community for stiff motion and missing NMMs. Family 2 systems hit this wall.
-- **Lesson:** *Distribution can scale ahead of fidelity in emerging markets, but not in the US/EU.* North American Deaf advocacy is more organized and more skeptical.
+- **Tech:** "Hugo" 3D avatar; mostly Family 2 (rule-based notation) with neural smoothing. ASL bolted on top of a Libras pipeline.
+- **Strength:** 4M+ app downloads; 700M+ words translated; UN "World's Best Social App"; deep B2B in Brazilian banking/gov ([App Store](https://apps.apple.com/us/app/hand-talk-learn-sign-language/id659816995)).
+- **Limit:** Avatar criticised in the Brazilian Deaf community for stiff motion and missing NMMs — the Family 2 wall.
+- **2025 update:** **Acquired by Sorenson in January 2025** ([Sorenson newsroom](https://sorenson.com/newsroom/sorenson-acquires-omnibridge-and-hand-talk-to-develop-automated-sign-language-translation-capabilities/)). Hand Talk is now the avatar/Latin-America arm of a US incumbent's AI sign-language push.
+- **Lesson:** *Distribution can scale ahead of fidelity in emerging markets, but not in the US/EU* — and that distribution is now consolidating under Sorenson.
 
 ### SignDiff / T2S-GPT / Sign-MExD (academic, Family 4)
 
@@ -75,12 +76,12 @@ The hybrid approach is not the cheapest or fastest, but is the only one that **s
 - **Limit:** Requires every sign to be hand-authored in HamNoSys. Productizing means employing linguists at scale.
 - **Lesson:** Notation is a powerful intermediate representation, but as a *production format* it doesn't scale. Use it as a debug surface, not a production runtime.
 
-### Sorenson AI / VRS players (US, incumbent)
+### Sorenson AI / VRS (US, incumbent) — now the primary competitive threat
 
-- **Tech:** Long-tail human VRS plus a new AI translation effort. Largely a service business that is becoming a tech business.
-- **Strength:** Massive existing Deaf customer base; brand trust.
-- **Limit:** Slow product velocity; institutional risk-aversion; legacy revenue dependence on VRS minutes.
-- **Lesson:** **Likely future acquirer.** Their distribution + GenASL's tech is a credible exit thesis at Y3–Y5.
+- **Tech:** Long-tail human VRS plus a fast-moving AI translation effort. Acquired **OmniBridge** (ex-Intel venture) and **Hand Talk** in January 2025; on **April 16, 2026** unveiled two AI Sign Language Translation (AST) proofs of concept — **text-to-sign with a "natural human-looking avatar"** (Family 4, pure neural) and real-time **sign-to-text** ([Sorenson newsroom](https://sorenson.com/newsroom/sorenson-communications-unveils-ai-sign-language-translation-ast-proofs-of-concept/)).
+- **Strength:** Massive existing Deaf customer base; brand trust; capital; now both the avatar tech (Hand Talk) and CV stack (OmniBridge).
+- **Limit:** The POC targets *point-of-service* interactions (retail, airports, hotel desks), not long-tail media overlay. The avatar is pure-neural and **already drew expert concern** about authenticity. Institutional velocity is slower than a startup's.
+- **Lesson:** Sorenson is **both the likeliest acquirer and the most credible direct threat.** GenASL's counter-position is structural: retrieval-anchored (not hallucinated), media-overlay (not service desk), Deaf-trust-first (not avatar-first). The window to establish that before Sorenson generalises is the binding constraint.
 
 ---
 

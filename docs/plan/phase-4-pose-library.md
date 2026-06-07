@@ -1,3 +1,21 @@
+# Phase 4 (archived) — Pose Library (per-gloss WLASL stitching)
+
+> **Superseded** as of 2026-05-24 by
+> [`phase-4-corpus-retrieval.md`](phase-4-corpus-retrieval.md). The
+> per-gloss WLASL pose library described below is retained as the
+> **lexical fallback** for Phase 5 — built only for the ~500 most
+> common glosses, not all 2 000 — when both OpenASL phrase retrieval
+> and ASL Citizen lexical retrieval miss.
+>
+> Rationale for the pivot: in motion-synthesis terms, stitching one
+> WLASL clip per `sign_sequence` token is Signed English with NMM
+> dressing, not proper ASL. See the approved planning memo at
+> `C:/Users/sanar/.claude/plans/ok-so-i-rethought-async-cupcake.md`.
+> The rest of this document still describes the (now-fallback) build
+> correctly.
+
+---
+
 # Phase 4 — Pose Library (offline asset build)
 
 > A one-shot offline script that processes the WLASL clip directory
